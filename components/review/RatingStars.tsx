@@ -1,9 +1,11 @@
 "use client";
 
+import { Star } from "lucide-react";
+
 export default function RatingStars({
   value,
   onChange,
-  size = 20,
+  size = 18,
 }: {
   value: number;
   onChange?: (v: number) => void;
@@ -17,11 +19,13 @@ export default function RatingStars({
           type="button"
           disabled={!onChange}
           onClick={() => onChange?.(n)}
-          className={n <= value ? "text-yellow-400" : "text-gray-300"}
-          style={{ fontSize: size, lineHeight: 1, cursor: onChange ? "pointer" : "default" }}
+          className={onChange ? "cursor-pointer" : "cursor-default"}
           aria-label={`${n}점`}
         >
-          ★
+          <Star
+            size={size}
+            className={n <= value ? "fill-amber-400 text-amber-400" : "fill-gray-200 text-gray-200"}
+          />
         </button>
       ))}
     </div>

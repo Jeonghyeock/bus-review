@@ -35,12 +35,16 @@ type LatLng = { lat: number; lng: number };
 export default function NaverMap({
   center,
   onReady,
+  onIdle,
 }: {
   center: LatLng;
   onReady?: (map: unknown) => void;
+  onIdle?: (center: LatLng) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const onIdleRef = useRef(onIdle);
+  onIdleRef.current = onIdle;
 
   useEffect(() => {
     if (!NCP_KEY) {
@@ -56,6 +60,11 @@ export default function NaverMap({
           zoom: 15,
         });
         onReady?.(map);
+        // 이동/줌 완료 시 새 중심 좌표를 알림 (그 지역 정류소 재조회용)
+        window.naver.maps.Event.addListener(map, "idle", () => {
+          const c = map.getCenter();
+          onIdleRef.current?.({ lat: c.lat(), lng: c.lng() });
+        });
       })
       .catch((e: Error) => setError(e.message));
     return () => {

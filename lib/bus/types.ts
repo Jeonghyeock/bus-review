@@ -8,6 +8,7 @@ export type Stop = {
   name: string;
   lat: number;
   lng: number;
+  stationNo?: string; // 정류소 번호(ARS)
   routeIds?: string[];
 };
 
@@ -21,10 +22,28 @@ export type BusRoute = {
 export type Arrival = {
   routeId: string;
   routeName: string;
+  routeType?: string; // 노선 유형명 (일반/직행좌석 등)
+  destName?: string; // 방면(종점)
   predictMinutes: number; // N분 후 도착
   remainStops?: number; // 몇 정거장 전
-  message?: string; // 원본 도착 메시지 (예: "3분5초후[2번째 전]", "곧 도착", "운행종료")
+  crowded?: number; // 혼잡도 1~4
+  lowPlate?: boolean; // 저상버스
+  remainSeats?: number; // 빈자리 수 (좌석형만)
+  plateNo?: string; // 차량번호
+  next?: { predictMinutes: number; remainStops?: number }; // 두 번째 도착 버스
+  message?: string; // 도착 정보 없음 등
   isLast?: boolean;
+};
+
+// 실시간 버스 위치
+export type BusPosition = {
+  id: string; // 차량 ID
+  lat: number;
+  lng: number;
+  plateNo?: string;
+  crowded?: number; // 혼잡도 1~4
+  remainSeats?: number; // 빈자리 수
+  lowPlate?: boolean; // 저상버스
 };
 
 // 리뷰 대상: 노선 또는 정류장

@@ -3,7 +3,8 @@
 
 import { XMLParser } from "fast-xml-parser";
 
-import type { Arrival, Stop } from "./types";
+import { ROUTE_TYPE } from "./labels";
+import type { Arrival, BusPosition, Stop } from "./types";
 
 const BASE = "https://apis.data.go.kr/6410000";
 const xml = new XMLParser({ ignoreAttributes: true, parseTagValue: true });
@@ -17,6 +18,13 @@ function apiKey(): string {
 function toArray<T>(v: T | T[] | undefined | null): T[] {
   if (v == null) return [];
   return Array.isArray(v) ? v : [v];
+}
+
+// 빈 문자열/누락은 undefined, 아니면 숫자
+function num(v: unknown): number | undefined {
+  if (v === "" || v == null) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 // GBIS 는 JSON/XML 둘 다 반환 가능 — 둘 다 같은 논리 구조(response.msgBody.*)로 파싱.
@@ -50,6 +58,23 @@ export async function getGyeonggiStopsNearby(
       name: String(it.stationName),
       lat: Number(it.y),
       lng: Number(it.x),
+      stationNo: it.mobileNo ? String(it.mobileNo).trim() : undefined,
+    }))
+    .filter((s) => s.id && Number.isFinite(s.lat) && Number.isFinite(s.lng));
+}
+
+// 정류소명/번호 검색
+export async function searchGyeonggiStops(keyword: string): Promise<Stop[]> {
+  const data = await callGbis("/busstationservice/v2/getBusStationListv2", { keyword });
+  const items = toArray<any>(data?.response?.msgBody?.busStationList);
+  return items
+    .map((it) => ({
+      id: String(it.stationId),
+      region: "gyeonggi" as const,
+      name: String(it.stationName),
+      lat: Number(it.y),
+      lng: Number(it.x),
+      stationNo: it.mobileNo ? String(it.mobileNo).trim() : undefined,
     }))
     .filter((s) => s.id && Number.isFinite(s.lat) && Number.isFinite(s.lng));
 }
@@ -61,15 +86,22 @@ export async function getGyeonggiArrivals(stationId: string): Promise<Arrival[]>
 
   return arrivals
     .map((a) => {
-      const predict = Number(a.predictTime1);
-      const hasPredict = a.predictTime1 !== "" && a.predictTime1 != null && Number.isFinite(predict);
-      const loc = a.locationNo1;
+      const predict = num(a.predictTime1);
+      const predict2 = num(a.predictTime2);
+      const seats = num(a.remainSeatCnt1);
       return {
         routeId: String(a.routeId),
         routeName: String(a.routeName),
-        predictMinutes: hasPredict ? predict : 0,
-        remainStops: loc !== "" && loc != null ? Number(loc) : undefined,
-        message: hasPredict ? undefined : "도착 정보 없음",
+        routeType: ROUTE_TYPE[Number(a.routeTypeCd)],
+        destName: a.routeDestName ? String(a.routeDestName) : undefined,
+        predictMinutes: predict ?? 0,
+        remainStops: num(a.locationNo1),
+        crowded: num(a.crowded1),
+        lowPlate: Number(a.lowPlate1) === 1,
+        remainSeats: seats != null && seats >= 0 ? seats : undefined,
+        plateNo: a.plateNo1 ? String(a.plateNo1) : undefined,
+        next: predict2 != null ? { predictMinutes: predict2, remainStops: num(a.locationNo2) } : undefined,
+        message: predict == null ? "도착 정보 없음" : undefined,
       };
     })
     .sort((a, b) => {
@@ -78,4 +110,47 @@ export async function getGyeonggiArrivals(stationId: string): Promise<Arrival[]>
       if (!a.message && b.message) return -1;
       return a.predictMinutes - b.predictMinutes;
     });
+}
+
+// stationId → 좌표 캐시 (좌표는 불변이므로 프로세스 내 재사용)
+const stationCoordCache = new Map<string, { lat: number; lng: number } | null>();
+
+async function stationCoord(stationId: string): Promise<{ lat: number; lng: number } | null> {
+  const cached = stationCoordCache.get(stationId);
+  if (cached !== undefined) return cached;
+  try {
+    const data = await callGbis("/busstationservice/v2/busStationInfov2", { stationId });
+    const info = data?.response?.msgBody?.busStationInfo;
+    const lat = Number(info?.y);
+    const lng = Number(info?.x);
+    const coord = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+    stationCoordCache.set(stationId, coord);
+    return coord;
+  } catch {
+    return null;
+  }
+}
+
+// 노선의 실시간 버스 위치. 위치 API 는 stationId 만 주므로 좌표로 변환(캐시).
+export async function getGyeonggiBusPositions(routeId: string): Promise<BusPosition[]> {
+  const data = await callGbis("/buslocationservice/v2/getBusLocationListv2", { routeId });
+  const buses = toArray<any>(data?.response?.msgBody?.busLocationList);
+  const coords = await Promise.all(buses.map((b) => stationCoord(String(b.stationId))));
+
+  const result: BusPosition[] = [];
+  buses.forEach((b, i) => {
+    const c = coords[i];
+    if (!c) return;
+    const seats = num(b.remainSeatCnt);
+    result.push({
+      id: String(b.vehId ?? b.plateNo),
+      lat: c.lat,
+      lng: c.lng,
+      plateNo: String(b.plateNo),
+      crowded: num(b.crowded),
+      remainSeats: seats != null && seats >= 0 ? seats : undefined,
+      lowPlate: Number(b.lowPlate) === 1,
+    });
+  });
+  return result;
 }

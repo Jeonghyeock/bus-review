@@ -3,8 +3,7 @@
 // 버스들이 순환 이동하는 것으로 시뮬레이션한다. (실 API 연결 시 이 파일만 교체)
 
 import { MOCK_STOPS } from "./mock";
-
-export type BusPosition = { id: string; lat: number; lng: number };
+import type { BusPosition } from "./types";
 
 type LatLng = { lat: number; lng: number };
 

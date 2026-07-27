@@ -2,8 +2,8 @@ import { atom } from "jotai";
 
 import type { Region, Stop } from "@/lib/bus/types";
 
-// 지도 중심 (기본: 강남역)
-export const mapCenterAtom = atom<{ lat: number; lng: number }>({ lat: 37.4979, lng: 127.0276 });
+// 지도 중심 (기본: 수원역 — 경기 실데이터 기준)
+export const mapCenterAtom = atom<{ lat: number; lng: number }>({ lat: 37.2659, lng: 126.9997 });
 
 // 현재 선택된 정류장 (바텀시트에 표시)
 export const selectedStopAtom = atom<Stop | null>(null);

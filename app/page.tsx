@@ -3,6 +3,7 @@
 import { useAtom } from "jotai";
 import { useState } from "react";
 
+import BusMarkers from "@/components/map/BusMarkers";
 import NaverMap from "@/components/map/NaverMap";
 import StopMarkers from "@/components/map/StopMarkers";
 import BottomSheet from "@/components/sheet/BottomSheet";
@@ -28,6 +29,7 @@ export default function Home() {
     <main className="relative h-screen w-screen overflow-hidden">
       <NaverMap center={center} onReady={setMap} />
       {!!map && stops && <StopMarkers map={map} stops={stops} onSelect={handleSelectStop} />}
+      {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}
 
       <BottomSheet>
         {selectedRoute ? (

@@ -4,7 +4,7 @@
 import { XMLParser } from "fast-xml-parser";
 
 import { ROUTE_TYPE } from "./labels";
-import type { Arrival, BusPosition, Stop } from "./types";
+import type { Arrival, BusPosition, LatLng, Stop } from "./types";
 
 const BASE = "https://apis.data.go.kr/6410000";
 const xml = new XMLParser({ ignoreAttributes: true, parseTagValue: true });
@@ -129,6 +129,17 @@ async function stationCoord(stationId: string): Promise<{ lat: number; lng: numb
   } catch {
     return null;
   }
+}
+
+// 노선 형상(경로) 좌표 — 도로를 따라가는 폴리라인용.
+export async function getGyeonggiRoutePath(routeId: string): Promise<LatLng[]> {
+  const data = await callGbis("/busrouteservice/v2/getBusRouteLineListv2", { routeId });
+  const items = toArray<any>(data?.response?.msgBody?.busRouteLineList);
+  return items
+    .map((it) => ({ seq: Number(it.lineSeq), lat: Number(it.y), lng: Number(it.x) }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    .sort((a, b) => a.seq - b.seq)
+    .map(({ lat, lng }) => ({ lat, lng }));
 }
 
 // 노선의 실시간 버스 위치. 위치 API 는 stationId 만 주므로 좌표로 변환(캐시).

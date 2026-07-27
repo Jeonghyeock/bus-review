@@ -6,9 +6,10 @@ import type { Stop } from "@/lib/bus/types";
 
 import { queryKeys } from "./queryKeys";
 
-export function useNearbyStops(lat: number, lng: number) {
+export function useNearbyStops(lat: number, lng: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.nearbyStops(lat, lng),
+    enabled,
     // 지도 이동으로 중심이 바뀌어도 새 데이터가 올 때까지 이전 마커 유지
     placeholderData: (prev) => prev,
     queryFn: async (): Promise<Stop[]> => {

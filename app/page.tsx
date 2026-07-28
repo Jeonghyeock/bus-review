@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import BusMarkers from "@/components/map/BusMarkers";
 import MyLocationButton from "@/components/map/MyLocationButton";
+import MyLocationMarker from "@/components/map/MyLocationMarker";
 import NaverMap from "@/components/map/NaverMap";
 import RoutePolyline from "@/components/map/RoutePolyline";
 import StopMarkers from "@/components/map/StopMarkers";
@@ -34,6 +35,7 @@ export default function Home() {
   const [zoom, setZoom] = useState(15);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [pendingCenter, setPendingCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const setSelectedBusId = useSetAtom(selectedBusIdAtom);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const appliedDeepLink = useRef(false);
@@ -112,6 +114,17 @@ export default function Home() {
       const slng = Number(p.get("slng"));
       setSelected({ id: p.get("stop")!, name: p.get("sname") ?? "정류소", lat: slat, lng: slng, region });
       if (Number.isFinite(slat) && Number.isFinite(slng)) setPendingCenter({ lat: slat, lng: slng });
+    } else if (navigator.geolocation) {
+      // 딥링크가 없으면 현재 위치로 (거부/실패 시 기본 수원역 유지)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setPendingCenter(c);
+          setMyLocation(c);
+        },
+        () => {},
+        { timeout: 5000 },
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -212,7 +225,13 @@ export default function Home() {
         )}
         {!!map && selectedRoute && <RoutePolyline map={map} routeId={selectedRoute.id} />}
         {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}
-        <MyLocationButton onLocate={moveTo} />
+        {!!map && myLocation && <MyLocationMarker map={map} position={myLocation} />}
+        <MyLocationButton
+          onLocate={(lat, lng) => {
+            moveTo(lat, lng);
+            setMyLocation({ lat, lng });
+          }}
+        />
 
         {!isDesktop && (
           <>

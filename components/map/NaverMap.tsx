@@ -45,6 +45,7 @@ export default function NaverMap({
   const [error, setError] = useState<string | null>(null);
   const onIdleRef = useRef(onIdle);
   onIdleRef.current = onIdle;
+  const roRef = useRef<ResizeObserver | null>(null);
 
   useEffect(() => {
     if (!NCP_KEY) {
@@ -65,10 +66,16 @@ export default function NaverMap({
           const c = map.getCenter();
           onIdleRef.current?.({ lat: c.lat(), lng: c.lng(), zoom: map.getZoom() });
         });
+        // 컨테이너 크기 변화(반응형 레이아웃/창 리사이즈) 시 지도 재정렬
+        roRef.current = new ResizeObserver(() => {
+          if (window.naver?.maps) window.naver.maps.Event.trigger(map, "resize");
+        });
+        if (ref.current) roRef.current.observe(ref.current);
       })
       .catch((e: Error) => setError(e.message));
     return () => {
       cancelled = true;
+      roRef.current?.disconnect();
     };
     // 지도는 최초 1회만 생성 (center 변경은 별도 로직으로 panTo)
     // eslint-disable-next-line react-hooks/exhaustive-deps

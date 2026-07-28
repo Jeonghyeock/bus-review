@@ -91,18 +91,19 @@ export default function Home() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden">
-      <NaverMap center={center} onReady={setMap} onIdle={handleIdle} />
+      {/* 지도 영역 — 데스크톱에선 사이드바 폭만큼 왼쪽을 비워 지도 중심이 보이는 영역 기준이 되게 함 */}
+      <div className="relative h-full w-full md:pl-[380px]">
+        <NaverMap center={center} onReady={setMap} onIdle={handleIdle} />
+      </div>
       {!!map && stops && <StopMarkers map={map} stops={stops} onSelect={handleSelectStop} />}
       {!!map && selectedRoute && <RoutePolyline map={map} routeId={selectedRoute.id} />}
       {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}
       <MyLocationButton onLocate={moveTo} />
 
       {isDesktop ? (
-        <aside className="absolute bottom-4 left-4 top-4 z-20 flex w-[380px] flex-col gap-3">
+        <aside className="absolute left-0 top-0 z-20 flex h-full w-[380px] flex-col gap-3 bg-white p-4 shadow-xl">
           {searchEl}
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
-            {content}
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
         </aside>
       ) : (
         <>

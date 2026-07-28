@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtom, useSetAtom } from "jotai";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import BusMarkers from "@/components/map/BusMarkers";
 import MyLocationButton from "@/components/map/MyLocationButton";
@@ -55,10 +55,13 @@ export default function Home() {
     }
   };
 
-  const handleSelectStop = (stop: Stop) => {
-    setSelectedRoute(null);
-    setSelected(stop);
-  };
+  const handleSelectStop = useCallback(
+    (stop: Stop) => {
+      setSelectedRoute(null);
+      setSelected(stop);
+    },
+    [setSelectedRoute, setSelected],
+  );
 
   const handleSearchSelect = (stop: Stop) => {
     moveTo(stop.lat, stop.lng);
@@ -131,7 +134,9 @@ export default function Home() {
 
       <div className="relative flex-1">
         <NaverMap center={center} onReady={setMap} onIdle={handleIdle} />
-        {!!map && stops && <StopMarkers map={map} stops={stops} onSelect={handleSelectStop} />}
+        {!!map && stops && (
+          <StopMarkers map={map} stops={stops} zoom={zoom} onSelect={handleSelectStop} />
+        )}
         {!!map && selectedRoute && <RoutePolyline map={map} routeId={selectedRoute.id} />}
         {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}
         <MyLocationButton onLocate={moveTo} />

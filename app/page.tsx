@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtom, useSetAtom } from "jotai";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import BusMarkers from "@/components/map/BusMarkers";
 import MyLocationButton from "@/components/map/MyLocationButton";
@@ -14,7 +14,7 @@ import BottomSheet from "@/components/sheet/BottomSheet";
 import RoutePanel from "@/components/sheet/RoutePanel";
 import StopPanel from "@/components/sheet/StopPanel";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import type { RouteStation, Stop } from "@/lib/bus/types";
+import type { Region, RouteStation, Stop } from "@/lib/bus/types";
 import { type Bounds, useStopsInView } from "@/lib/query/useStopsInView";
 import {
   mapCenterAtom,
@@ -32,8 +32,10 @@ export default function Home() {
   const [map, setMap] = useState<unknown>(null);
   const [zoom, setZoom] = useState(15);
   const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [pendingCenter, setPendingCenter] = useState<{ lat: number; lng: number } | null>(null);
   const setSelectedBusId = useSetAtom(selectedBusIdAtom);
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const appliedDeepLink = useRef(false);
 
   // 노선이 바뀌면 이전 버스 선택 해제
   useEffect(() => {
@@ -70,6 +72,50 @@ export default function Home() {
 
   // 노선도의 정류소 클릭 → 지도 이동
   const handleStationClick = (st: RouteStation) => moveTo(st.lat, st.lng);
+
+  // 딥링크: URL 파라미터로 들어온 정류소/노선 복원 (최초 1회)
+  useEffect(() => {
+    if (appliedDeepLink.current) return;
+    appliedDeepLink.current = true;
+    const p = new URLSearchParams(window.location.search);
+    const region = (p.get("region") as Region) || "gyeonggi";
+    if (p.get("route")) {
+      setSelectedRoute({ id: p.get("route")!, name: p.get("rname") ?? p.get("route")!, region });
+    } else if (p.get("stop")) {
+      const slat = Number(p.get("slat"));
+      const slng = Number(p.get("slng"));
+      setSelected({ id: p.get("stop")!, name: p.get("sname") ?? "정류소", lat: slat, lng: slng, region });
+      if (Number.isFinite(slat) && Number.isFinite(slng)) setPendingCenter({ lat: slat, lng: slng });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 지도 준비되면 딥링크 좌표로 이동
+  useEffect(() => {
+    if (map && pendingCenter) {
+      moveTo(pendingCenter.lat, pendingCenter.lng);
+      setPendingCenter(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, pendingCenter]);
+
+  // 선택 상태 → URL 반영 (공유 가능)
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (selectedRoute) {
+      p.set("route", selectedRoute.id);
+      p.set("rname", selectedRoute.name);
+      p.set("region", selectedRoute.region);
+    } else if (selected) {
+      p.set("stop", selected.id);
+      p.set("sname", selected.name);
+      p.set("slat", String(selected.lat));
+      p.set("slng", String(selected.lng));
+      p.set("region", selected.region);
+    }
+    const qs = p.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [selected, selectedRoute]);
 
   const content = selectedRoute ? (
     <RoutePanel

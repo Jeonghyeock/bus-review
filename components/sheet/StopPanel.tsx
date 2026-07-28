@@ -3,6 +3,7 @@
 import { useSetAtom } from "jotai";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 
+import ShareButton from "@/components/common/ShareButton";
 import ReviewSection from "@/components/review/ReviewSection";
 import { CROWDED_COLOR, CROWDED_LABEL } from "@/lib/bus/labels";
 import type { Stop } from "@/lib/bus/types";
@@ -22,13 +23,16 @@ export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => 
         <ArrowLeft size={16} /> 주변 정류장
       </button>
 
-      <div className="flex items-center gap-2">
-        <h2 className="text-xl font-bold text-gray-900">{stop.name}</h2>
-        {stop.stationNo && (
-          <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-            {stop.stationNo}
-          </span>
-        )}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="truncate text-xl font-bold text-gray-900">{stop.name}</h2>
+          {stop.stationNo && (
+            <span className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+              {stop.stationNo}
+            </span>
+          )}
+        </div>
+        <ShareButton />
       </div>
       <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-400">
         <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />

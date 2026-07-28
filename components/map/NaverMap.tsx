@@ -39,7 +39,12 @@ export default function NaverMap({
 }: {
   center: LatLng;
   onReady?: (map: unknown) => void;
-  onIdle?: (view: { lat: number; lng: number; zoom: number }) => void;
+  onIdle?: (view: {
+    lat: number;
+    lng: number;
+    zoom: number;
+    bounds: { swLat: number; swLng: number; neLat: number; neLng: number };
+  }) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +69,15 @@ export default function NaverMap({
         // 이동/줌 완료 시 새 중심 좌표를 알림 (그 지역 정류소 재조회용)
         window.naver.maps.Event.addListener(map, "idle", () => {
           const c = map.getCenter();
-          onIdleRef.current?.({ lat: c.lat(), lng: c.lng(), zoom: map.getZoom() });
+          const b = map.getBounds();
+          const sw = b.getSW();
+          const ne = b.getNE();
+          onIdleRef.current?.({
+            lat: c.lat(),
+            lng: c.lng(),
+            zoom: map.getZoom(),
+            bounds: { swLat: sw.lat(), swLng: sw.lng(), neLat: ne.lat(), neLng: ne.lng() },
+          });
         });
         // 컨테이너 크기 변화(반응형 레이아웃/창 리사이즈) 시 지도 재정렬
         roRef.current = new ResizeObserver(() => {

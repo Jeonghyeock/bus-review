@@ -5,6 +5,7 @@ import {
   getGyeonggiArrivals,
   getGyeonggiBusPositions,
   getGyeonggiRoutePath,
+  getGyeonggiStopsInBounds,
   getGyeonggiStopsNearby,
   searchGyeonggiStops,
 } from "./gyeonggi";
@@ -16,10 +17,16 @@ const USE_MOCK = process.env.BUS_USE_MOCK !== "false";
 
 export async function getStopsNearby(lat: number, lng: number, radius = 500): Promise<Stop[]> {
   if (USE_MOCK) return MOCK_STOPS;
-
-  // 서울(TOPIS)은 화재로 키 동기화 지연 중 → 현재는 경기(경기데이터드림) 실데이터 사용.
-  // 서울 복구 시 seoul.ts 어댑터를 좌표로 병합 호출.
   return getGyeonggiStopsNearby(lat, lng, radius);
+}
+
+// 보이는 지도 영역(bounds) 내 정류소 — 500m 셀 격자로 넓게 커버
+export async function getStopsInBounds(
+  sw: { lat: number; lng: number },
+  ne: { lat: number; lng: number },
+): Promise<Stop[]> {
+  if (USE_MOCK) return MOCK_STOPS;
+  return getGyeonggiStopsInBounds(sw, ne);
 }
 
 export async function getArrivals(stopId: string): Promise<Arrival[]> {

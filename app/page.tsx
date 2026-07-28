@@ -14,7 +14,7 @@ import RoutePanel from "@/components/sheet/RoutePanel";
 import StopPanel from "@/components/sheet/StopPanel";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { Stop } from "@/lib/bus/types";
-import { useNearbyStops } from "@/lib/query/useNearbyStops";
+import { type Bounds, useStopsInView } from "@/lib/query/useStopsInView";
 import { mapCenterAtom, selectedRouteAtom, selectedStopAtom } from "@/store/mapStore";
 
 const MIN_ZOOM = 14;
@@ -24,16 +24,17 @@ export default function Home() {
   const [selected, setSelected] = useAtom(selectedStopAtom);
   const [selectedRoute, setSelectedRoute] = useAtom(selectedRouteAtom);
   const [map, setMap] = useState<unknown>(null);
-  const [view, setView] = useState({ ...center, zoom: 15 });
+  const [zoom, setZoom] = useState(15);
+  const [bounds, setBounds] = useState<Bounds | null>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
-  const canLoad = view.zoom >= MIN_ZOOM;
-  const { data } = useNearbyStops(view.lat, view.lng, canLoad);
+  const canLoad = zoom >= MIN_ZOOM;
+  const { data } = useStopsInView(bounds, canLoad);
   const stops = canLoad ? data : [];
 
-  const handleIdle = (v: { lat: number; lng: number; zoom: number }) => {
-    const round = (n: number) => Math.round(n * 1e4) / 1e4;
-    setView({ lat: round(v.lat), lng: round(v.lng), zoom: v.zoom });
+  const handleIdle = (v: { lat: number; lng: number; zoom: number; bounds: Bounds }) => {
+    setZoom(v.zoom);
+    setBounds(v.bounds);
   };
 
   const moveTo = (lat: number, lng: number) => {

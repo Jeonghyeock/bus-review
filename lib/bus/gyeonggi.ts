@@ -63,20 +63,63 @@ export async function getGyeonggiStopsNearby(
     .filter((s) => s.id && Number.isFinite(s.lat) && Number.isFinite(s.lng));
 }
 
+function mapStation(it: any): Stop {
+  return {
+    id: String(it.stationId),
+    region: "gyeonggi",
+    name: String(it.stationName),
+    lat: Number(it.y),
+    lng: Number(it.x),
+    stationNo: it.mobileNo ? String(it.mobileNo).trim() : undefined,
+  };
+}
+
+function validStop(s: Stop): boolean {
+  return !!s.id && Number.isFinite(s.lat) && Number.isFinite(s.lng);
+}
+
 // 정류소명/번호 검색
 export async function searchGyeonggiStops(keyword: string): Promise<Stop[]> {
   const data = await callGbis("/busstationservice/v2/getBusStationListv2", { keyword });
-  const items = toArray<any>(data?.response?.msgBody?.busStationList);
-  return items
-    .map((it) => ({
-      id: String(it.stationId),
-      region: "gyeonggi" as const,
-      name: String(it.stationName),
-      lat: Number(it.y),
-      lng: Number(it.x),
-      stationNo: it.mobileNo ? String(it.mobileNo).trim() : undefined,
-    }))
-    .filter((s) => s.id && Number.isFinite(s.lat) && Number.isFinite(s.lng));
+  return toArray<any>(data?.response?.msgBody?.busStationList).map(mapStation).filter(validStop);
+}
+
+// 셀 단위 근접조회 캐시 (정류소는 불변)
+const CELL = 0.006; // 격자 셀 크기(도) ~ 500m
+const cellCache = new Map<string, Stop[]>();
+
+async function stopsInCell(cellLat: number, cellLng: number): Promise<Stop[]> {
+  const key = `${cellLat.toFixed(3)},${cellLng.toFixed(3)}`;
+  const cached = cellCache.get(key);
+  if (cached) return cached;
+  const data = await callGbis("/busstationservice/v2/getBusStationAroundListv2", {
+    x: String(cellLng),
+    y: String(cellLat),
+  });
+  const stops = toArray<any>(data?.response?.msgBody?.busStationAroundList)
+    .map(mapStation)
+    .filter(validStop);
+  cellCache.set(key, stops);
+  return stops;
+}
+
+// 보이는 영역(bounds)을 500m 셀 격자로 나눠 병렬 조회 후 병합 — 넓은 범위 커버
+export async function getGyeonggiStopsInBounds(
+  sw: { lat: number; lng: number },
+  ne: { lat: number; lng: number },
+): Promise<Stop[]> {
+  const cells: Array<[number, number]> = [];
+  for (let la = Math.floor(sw.lat / CELL); la <= Math.floor(ne.lat / CELL); la++) {
+    for (let ln = Math.floor(sw.lng / CELL); ln <= Math.floor(ne.lng / CELL); ln++) {
+      cells.push([(la + 0.5) * CELL, (ln + 0.5) * CELL]);
+    }
+  }
+  if (cells.length > 24) cells.length = 24; // 호출량 안전 상한
+
+  const results = await Promise.all(cells.map(([la, ln]) => stopsInCell(la, ln)));
+  const byId = new Map<string, Stop>();
+  results.flat().forEach((s) => byId.set(s.id, s));
+  return [...byId.values()];
 }
 
 // 정류소 실시간 도착 — getBusArrivalListv2 응답에 routeName 이 포함돼 그대로 사용.

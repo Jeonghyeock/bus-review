@@ -5,6 +5,8 @@
 
 이직용 포트폴리오. 증명 목표: **지도 SDK · 공공 API 실시간 데이터 · 풀스택 CRUD/인증 · 성능(클러스터링·캐싱) · 깔끔한 UX**.
 
+> 📌 이 문서는 **초기 설계**다. 실제 구현·현재 구조/기능은 [`README.md`](./README.md)가 기준. (구현하며 달라진 부분: 서울 TOPIS 보류 → 경기 GBIS 라이브, 주변조회를 셀 격자 스트리밍으로, shadcn 미사용 등)
+
 ---
 
 ## 1. 기술 스택
@@ -16,8 +18,7 @@
 | 서버 상태 | TanStack Query | 도착정보 폴링·캐싱 |
 | 클라 UI 상태 | Jotai | 선택된 정류장/노선, 바텀시트 상태 |
 | 백엔드(리뷰) | **Supabase** (Postgres + Auth + RLS) | 리뷰 CRUD·소셜 로그인 |
-| 스타일 | Tailwind CSS + shadcn/ui | 바텀시트·버튼 등 빠르게 |
-| 테스트 | Vitest(유닛) + Playwright(E2E, 선택) | 어댑터·유틸 위주 |
+| 스타일 | Tailwind CSS v4 + lucide-react | 바텀시트·버튼 등 |
 | 배포 | Vercel + Supabase Cloud | |
 
 ---
@@ -72,9 +73,9 @@ bus_targets (
   primary key (target_type, target_id)
 )
 
--- 좋아요 / 즐겨찾기 (선택, 확장)
-review_likes (review_id uuid, user_id uuid, primary key(review_id,user_id))
-favorites (user_id uuid, target_type text, target_id text, primary key(user_id,target_type,target_id))
+-- 즐겨찾기 (구현됨 — 0003_favorites.sql)
+favorites (user_id uuid, target_type text, target_id text, region text, name text, lat float8, lng float8,
+           primary key(user_id,target_type,target_id))
 ```
 
 **RLS(Row Level Security)** — 어필 포인트:
@@ -89,20 +90,24 @@ favorites (user_id uuid, target_type text, target_id text, primary key(user_id,t
 클라이언트 → **우리 API 라우트** → 공공 API(정규화) / Supabase
 
 ```
-GET /api/stops/nearby?lat&lng&radius     주변 정류장
-GET /api/stops/:id/arrivals              정류장 실시간 도착(폴링 대상, 짧은 TTL 캐시)
-GET /api/routes/:id                      노선 상세(경유 정류장·경로)
-GET /api/search?q=                       정류장/노선 검색
+GET /api/stops/in-view?swLat&swLng&neLat&neLng   지도 영역 정류소 (중심부터 NDJSON 스트리밍)
+GET /api/stops/:id/arrivals                       정류장 실시간 도착 (30초 폴링)
+GET /api/stops/search?q=                          정류장 검색
+GET /api/routes/:id/stations                      노선 경유 정류소 (노선도)
+GET /api/routes/:id/path                           노선 경로 폴리라인
+GET /api/routes/:id/buses                          노선 실시간 버스 위치 (15초 폴링)
 ```
 
 `lib/bus/` 구조 (어댑터 패턴):
 ```
 lib/bus/
-  types.ts        # 공통 타입: Stop, Route, Arrival
-  seoul.ts        # 서울 API → 공통 타입 변환
-  gyeonggi.ts     # 경기 API → 공통 타입 변환
-  index.ts        # region 보고 어댑터 선택 (getStopsNearby 등)
+  types.ts        # 공통 타입: Stop, Arrival, BusPosition, RouteStation
+  gyeonggi.ts     # 경기(GBIS) API → 공통 타입 (셀 격자·스트리밍·429 대응)
+  index.ts        # region 보고 어댑터 선택 (streamStopsInBounds 등)
+  labels.ts       # 혼잡도/노선유형 라벨·색상
+  mock.ts / mockBuses.ts  # BUS_USE_MOCK 목업 데이터
 ```
+> 서울 어댑터(`seoul.ts`)는 TOPIS 인증키 이슈로 보류 상태라 현재 코드에는 없다. 복구 시 같은 인터페이스로 추가하면 `index.ts` 디스패치만 늘리면 된다.
 
 ---
 
@@ -125,26 +130,29 @@ lib/bus/
 bus-review/
   app/
     layout.tsx
-    page.tsx                         # 지도 메인
+    page.tsx                         # 지도 메인 (사이드바/바텀시트 반응형)
     api/
-      stops/nearby/route.ts
+      stops/in-view/route.ts         # 지도 영역 정류소 (스트리밍)
       stops/[id]/arrivals/route.ts
-      routes/[id]/route.ts
-      search/route.ts
-    auth/callback/route.ts           # Supabase 소셜 콜백
+      stops/search/route.ts
+      routes/[id]/{stations,path,buses}/route.ts
+    auth/callback/route.ts           # Supabase 매직링크 콜백
   components/
-    map/      NaverMap, StopMarker, RoutePolyline, Clusterer, MyLocation
-    sheet/    BottomSheet, StopPanel, RoutePanel
-    review/   ReviewList, ReviewForm, RatingStars, ReviewItem
-    search/   SearchBar, SearchResults
-    ui/       (shadcn)
+    map/       NaverMap, StopMarkers, BusMarkers, RoutePolyline, MyLocation(Button|Marker)
+    route/     RouteStopList, RouteDetailPanel
+    sheet/     BottomSheet, StopPanel, RoutePanel
+    review/    ReviewSection, RatingStars
+    search/    SearchBar
+    favorites/ FavoritesList
+    common/    ShareButton, FavoriteButton
   lib/
-    bus/      types.ts, seoul.ts, gyeonggi.ts, index.ts
-    supabase/ client.ts (browser), server.ts (RSC/route)
-    query/    queryKeys.ts, useNearbyStops.ts, useArrivals.ts, useRouteReviews.ts, ...
-  store/      mapStore.ts            # Jotai: selectedTarget, sheetState, center
-  types/
-  tests/
+    bus/      types.ts, gyeonggi.ts, index.ts, labels.ts, mock*.ts
+    supabase/ client.ts (browser), server.ts (RSC/route), useUser.tsx (세션 Context)
+    query/    queryKeys.ts, useStopsInView.ts, useArrivals.ts, useBusPositions.ts,
+              useRoutePath.ts, useRouteStations.ts, useFavorites.ts
+    hooks/    useMediaQuery.ts
+  store/      mapStore.ts            # Jotai: selected stop/route/bus, center
+  supabase/migrations/              # Postgres 스키마 + RLS
 ```
 
 ---

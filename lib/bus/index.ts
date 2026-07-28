@@ -6,8 +6,8 @@ import {
   getGyeonggiBusPositions,
   getGyeonggiRoutePath,
   getGyeonggiRouteStations,
-  getGyeonggiStopsInBounds,
   searchGyeonggiStops,
+  streamGyeonggiStopsInBounds,
 } from "./gyeonggi";
 import { MOCK_STOPS, mockArrivals } from "./mock";
 import { mockBusPositions } from "./mockBuses";
@@ -15,13 +15,17 @@ import type { Arrival, BusPosition, LatLng, RouteStation, Stop } from "./types";
 
 const USE_MOCK = process.env.BUS_USE_MOCK !== "false";
 
-// 보이는 지도 영역(bounds) 내 정류소 — 500m 셀 격자로 넓게 커버
-export async function getStopsInBounds(
+// 보이는 지도 영역(bounds) 내 정류소 — 중심 셀부터 조회하며 완료되는 대로 스트리밍
+export async function streamStopsInBounds(
   sw: { lat: number; lng: number },
   ne: { lat: number; lng: number },
-): Promise<Stop[]> {
-  if (USE_MOCK) return MOCK_STOPS;
-  return getGyeonggiStopsInBounds(sw, ne);
+  onCell: (stops: Stop[]) => void,
+): Promise<void> {
+  if (USE_MOCK) {
+    onCell(MOCK_STOPS);
+    return;
+  }
+  return streamGyeonggiStopsInBounds(sw, ne, onCell);
 }
 
 export async function getArrivals(stopId: string): Promise<Arrival[]> {

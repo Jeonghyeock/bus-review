@@ -33,11 +33,20 @@ function parseResp(text: string): any {
   return t.startsWith("<") ? xml.parse(text) : JSON.parse(text);
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function callGbis(path: string, params: Record<string, string>): Promise<any> {
   const qs = new URLSearchParams({ serviceKey: apiKey(), format: "json", ...params });
-  const res = await fetch(`${BASE}${path}?${qs}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`GBIS ${path} 실패: ${res.status}`);
-  return parseResp(await res.text());
+  // 429(rate limit)는 짧게 backoff 후 최대 2회 재시도
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${BASE}${path}?${qs}`, { cache: "no-store" });
+    if (res.ok) return parseResp(await res.text());
+    if (res.status === 429 && attempt < 2) {
+      await sleep(300 * (attempt + 1));
+      continue;
+    }
+    throw new Error(`GBIS ${path} 실패: ${res.status}`);
+  }
 }
 
 function mapStation(it: any): Stop {
@@ -85,31 +94,67 @@ async function stopsInCell(cellLat: number, cellLng: number): Promise<Stop[]> {
   return stops;
 }
 
-// 보이는 영역(bounds)을 500m 셀 격자로 나눠 병렬 조회 후 병합 — 넓은 범위 커버
-export async function getGyeonggiStopsInBounds(
+// 동시 실행 수를 제한하는 풀 — GBIS rate limit(429) 회피. 실패해도 나머지는 반영.
+async function runPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await fn(items[i]) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+// bounds 를 500m 셀 격자로 나누고 "화면 중심에서 가까운 순"으로 정렬 (가운데부터 조회)
+function cellsInBounds(
   sw: { lat: number; lng: number },
   ne: { lat: number; lng: number },
-): Promise<Stop[]> {
+): Array<[number, number]> {
   const cells: Array<[number, number]> = [];
   for (let la = Math.floor(sw.lat / CELL); la <= Math.floor(ne.lat / CELL); la++) {
     for (let ln = Math.floor(sw.lng / CELL); ln <= Math.floor(ne.lng / CELL); ln++) {
       cells.push([(la + 0.5) * CELL, (ln + 0.5) * CELL]);
     }
   }
+  const cy = (sw.lat + ne.lat) / 2;
+  const cx = (sw.lng + ne.lng) / 2;
+  const dist2 = ([la, ln]: [number, number]) => (la - cy) ** 2 + (ln - cx) ** 2;
+  cells.sort((a, b) => dist2(a) - dist2(b));
+
   const MAX_CELLS = 24; // 호출량 안전 상한
   if (cells.length > MAX_CELLS) {
-    console.warn(`[gyeonggi] bounds 셀 ${cells.length}개 → ${MAX_CELLS}개로 제한 (일부 영역 미조회)`);
+    console.warn(`[gyeonggi] bounds 셀 ${cells.length}개 → ${MAX_CELLS}개로 제한 (외곽 일부 미조회)`);
     cells.length = MAX_CELLS;
   }
+  return cells;
+}
 
-  // 셀 하나가 실패해도 나머지는 반영 (allSettled)
-  const results = await Promise.allSettled(cells.map(([la, ln]) => stopsInCell(la, ln)));
-  const byId = new Map<string, Stop>();
-  for (const r of results) {
-    if (r.status === "fulfilled") r.value.forEach((s) => byId.set(s.id, s));
-    else console.error("[gyeonggi] 셀 조회 실패:", r.reason);
-  }
-  return [...byId.values()];
+// 중심 셀부터 조회하고, 완료되는 셀마다 onCell 로 흘려보낸다 (동시 6개, 429 회피).
+export async function streamGyeonggiStopsInBounds(
+  sw: { lat: number; lng: number },
+  ne: { lat: number; lng: number },
+  onCell: (stops: Stop[]) => void,
+): Promise<void> {
+  const cells = cellsInBounds(sw, ne);
+  await runPool(cells, 6, async ([la, ln]) => {
+    try {
+      const stops = await stopsInCell(la, ln);
+      if (stops.length) onCell(stops);
+    } catch (e) {
+      console.error("[gyeonggi] 셀 조회 실패:", e);
+    }
+  });
 }
 
 // 정류소 실시간 도착 — getBusArrivalListv2 응답에 routeName 이 포함돼 그대로 사용.

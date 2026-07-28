@@ -22,7 +22,7 @@ export default function MyLocationButton({
     <button
       onClick={handle}
       aria-label="현재 위치"
-      className="absolute right-4 top-[4.5rem] z-20 grid h-11 w-11 place-items-center rounded-full border border-gray-100 bg-white text-gray-600 shadow-lg transition hover:text-blue-600"
+      className="absolute right-4 top-[4.5rem] z-20 grid h-11 w-11 place-items-center rounded-full border border-gray-100 bg-white text-gray-600 shadow-lg transition hover:text-blue-600 md:top-auto md:bottom-6"
     >
       <LocateFixed size={20} />
     </button>

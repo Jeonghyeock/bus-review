@@ -18,7 +18,7 @@ export default function SearchBar({ onSelect }: { onSelect: (stop: Stop) => void
   }, [input]);
 
   return (
-    <div className="absolute left-1/2 top-3 z-20 w-[min(92%,440px)] -translate-x-1/2">
+    <div className="relative w-full">
       <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-white px-3.5 py-2.5 shadow-lg">
         <Search size={18} className="shrink-0 text-gray-400" />
         <input
@@ -46,7 +46,7 @@ export default function SearchBar({ onSelect }: { onSelect: (stop: Stop) => void
       </div>
 
       {open && debounced.length >= 2 && (
-        <ul className="mt-1.5 max-h-72 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-lg">
+        <ul className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-72 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-lg">
           {isFetching && !results && (
             <li className="px-4 py-3 text-sm text-gray-400">검색 중…</li>
           )}

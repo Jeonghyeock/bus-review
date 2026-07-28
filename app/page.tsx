@@ -12,9 +12,12 @@ import SearchBar from "@/components/search/SearchBar";
 import BottomSheet from "@/components/sheet/BottomSheet";
 import RoutePanel from "@/components/sheet/RoutePanel";
 import StopPanel from "@/components/sheet/StopPanel";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { Stop } from "@/lib/bus/types";
 import { useNearbyStops } from "@/lib/query/useNearbyStops";
 import { mapCenterAtom, selectedRouteAtom, selectedStopAtom } from "@/store/mapStore";
+
+const MIN_ZOOM = 14;
 
 export default function Home() {
   const [center] = useAtom(mapCenterAtom);
@@ -22,9 +25,8 @@ export default function Home() {
   const [selectedRoute, setSelectedRoute] = useAtom(selectedRouteAtom);
   const [map, setMap] = useState<unknown>(null);
   const [view, setView] = useState({ ...center, zoom: 15 });
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
-  // 너무 축소된 상태(넓은 범위)에선 조회하지 않음 — GBIS 반경 500m 특성상 의미 없음
-  const MIN_ZOOM = 14;
   const canLoad = view.zoom >= MIN_ZOOM;
   const { data } = useNearbyStops(view.lat, view.lng, canLoad);
   const stops = canLoad ? data : [];
@@ -50,54 +52,66 @@ export default function Home() {
     handleSelectStop(stop);
   };
 
+  const content = selectedRoute ? (
+    <RoutePanel route={selectedRoute} onBack={() => setSelectedRoute(null)} />
+  ) : selected ? (
+    <StopPanel stop={selected} onBack={() => setSelected(null)} />
+  ) : (
+    <div>
+      <h2 className="text-lg font-bold text-gray-900">주변 정류장</h2>
+      <p className="mt-0.5 text-xs text-gray-400">정류장을 선택하면 실시간 도착을 볼 수 있어요</p>
+      {!canLoad ? (
+        <p className="mt-3 rounded-xl bg-gray-50 py-6 text-center text-sm text-gray-400">
+          지도를 확대하면 주변 정류소가 표시돼요
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-1">
+          {stops?.map((s) => (
+            <li key={s.id}>
+              <button
+                className="flex w-full items-center justify-between rounded-lg px-2 py-2.5 text-left hover:bg-gray-50"
+                onClick={() => handleSelectStop(s)}
+              >
+                <span className="text-sm text-gray-800">{s.name}</span>
+                {s.stationNo && <span className="text-xs text-gray-400">{s.stationNo}</span>}
+              </button>
+            </li>
+          ))}
+          {stops?.length === 0 && (
+            <li className="rounded-xl bg-gray-50 py-6 text-center text-sm text-gray-400">
+              이 근처엔 정류소가 없어요. 지도를 옮겨보세요.
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+
+  const searchEl = <SearchBar onSelect={handleSearchSelect} />;
+
   return (
     <main className="relative h-screen w-screen overflow-hidden">
       <NaverMap center={center} onReady={setMap} onIdle={handleIdle} />
       {!!map && stops && <StopMarkers map={map} stops={stops} onSelect={handleSelectStop} />}
       {!!map && selectedRoute && <RoutePolyline map={map} routeId={selectedRoute.id} />}
       {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}
-
-      <SearchBar onSelect={handleSearchSelect} />
       <MyLocationButton onLocate={moveTo} />
 
-      <BottomSheet>
-        {selectedRoute ? (
-          <RoutePanel route={selectedRoute} onBack={() => setSelectedRoute(null)} />
-        ) : selected ? (
-          <StopPanel stop={selected} onBack={() => setSelected(null)} />
-        ) : (
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">주변 정류장</h2>
-            <p className="mt-0.5 text-xs text-gray-400">
-              정류장을 선택하면 실시간 도착을 볼 수 있어요
-            </p>
-            {!canLoad ? (
-              <p className="mt-3 rounded-xl bg-gray-50 py-6 text-center text-sm text-gray-400">
-                지도를 확대하면 주변 정류소가 표시돼요
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-1">
-                {stops?.map((s) => (
-                  <li key={s.id}>
-                    <button
-                      className="flex w-full items-center justify-between rounded-lg px-2 py-2.5 text-left hover:bg-gray-50"
-                      onClick={() => handleSelectStop(s)}
-                    >
-                      <span className="text-sm text-gray-800">{s.name}</span>
-                      {s.stationNo && <span className="text-xs text-gray-400">{s.stationNo}</span>}
-                    </button>
-                  </li>
-                ))}
-                {stops?.length === 0 && (
-                  <li className="rounded-xl bg-gray-50 py-6 text-center text-sm text-gray-400">
-                    이 근처엔 정류소가 없어요. 지도를 옮겨보세요.
-                  </li>
-                )}
-              </ul>
-            )}
+      {isDesktop ? (
+        <aside className="absolute bottom-4 left-4 top-4 z-20 flex w-[380px] flex-col gap-3">
+          {searchEl}
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            {content}
           </div>
-        )}
-      </BottomSheet>
+        </aside>
+      ) : (
+        <>
+          <div className="absolute left-1/2 top-3 z-20 w-[min(92%,440px)] -translate-x-1/2">
+            {searchEl}
+          </div>
+          <BottomSheet>{content}</BottomSheet>
+        </>
+      )}
     </main>
   );
 }

@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Bus } from "lucide-react";
 
+import FavoriteButton from "@/components/common/FavoriteButton";
 import ShareButton from "@/components/common/ShareButton";
 import ReviewSection from "@/components/review/ReviewSection";
 import RouteStopList from "@/components/route/RouteStopList";
@@ -40,7 +41,17 @@ export default function RoutePanel({
             </p>
           </div>
         </div>
-        <ShareButton />
+        <div className="flex shrink-0 items-center gap-2">
+          <FavoriteButton
+            item={{
+              target_type: "route",
+              target_id: route.id,
+              region: route.region,
+              name: route.name,
+            }}
+          />
+          <ShareButton />
+        </div>
       </div>
 
       <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-2 text-xs text-blue-600">

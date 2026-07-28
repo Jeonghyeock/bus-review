@@ -9,6 +9,7 @@ import NaverMap from "@/components/map/NaverMap";
 import RoutePolyline from "@/components/map/RoutePolyline";
 import StopMarkers from "@/components/map/StopMarkers";
 import RouteDetailPanel from "@/components/route/RouteDetailPanel";
+import FavoritesList from "@/components/favorites/FavoritesList";
 import SearchBar from "@/components/search/SearchBar";
 import BottomSheet from "@/components/sheet/BottomSheet";
 import RoutePanel from "@/components/sheet/RoutePanel";
@@ -73,6 +74,31 @@ export default function Home() {
   // 노선도의 정류소 클릭 → 지도 이동
   const handleStationClick = (st: RouteStation) => moveTo(st.lat, st.lng);
 
+  // 즐겨찾기 항목 선택
+  const handleSelectFavorite = (f: {
+    target_type: "route" | "stop";
+    target_id: string;
+    region: Region;
+    name: string;
+    lat: number | null;
+    lng: number | null;
+  }) => {
+    if (f.target_type === "route") {
+      setSelected(null);
+      setSelectedRoute({ id: f.target_id, name: f.name, region: f.region });
+    } else {
+      setSelectedRoute(null);
+      setSelected({
+        id: f.target_id,
+        name: f.name,
+        region: f.region,
+        lat: f.lat ?? 0,
+        lng: f.lng ?? 0,
+      });
+      if (f.lat != null && f.lng != null) moveTo(f.lat, f.lng);
+    }
+  };
+
   // 딥링크: URL 파라미터로 들어온 정류소/노선 복원 (최초 1회)
   useEffect(() => {
     if (appliedDeepLink.current) return;
@@ -128,6 +154,7 @@ export default function Home() {
     <StopPanel stop={selected} onBack={() => setSelected(null)} />
   ) : (
     <div>
+      <FavoritesList onSelect={handleSelectFavorite} />
       <h2 className="text-lg font-bold text-gray-900">주변 정류장</h2>
       <p className="mt-0.5 text-xs text-gray-400">정류장을 선택하면 실시간 도착을 볼 수 있어요</p>
       {!canLoad ? (

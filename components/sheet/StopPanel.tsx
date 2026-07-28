@@ -3,6 +3,7 @@
 import { useSetAtom } from "jotai";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 
+import FavoriteButton from "@/components/common/FavoriteButton";
 import ShareButton from "@/components/common/ShareButton";
 import ReviewSection from "@/components/review/ReviewSection";
 import { CROWDED_COLOR, CROWDED_LABEL } from "@/lib/bus/labels";
@@ -32,7 +33,19 @@ export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => 
             </span>
           )}
         </div>
-        <ShareButton />
+        <div className="flex shrink-0 items-center gap-2">
+          <FavoriteButton
+            item={{
+              target_type: "stop",
+              target_id: stop.id,
+              region: stop.region,
+              name: stop.name,
+              lat: stop.lat,
+              lng: stop.lng,
+            }}
+          />
+          <ShareButton />
+        </div>
       </div>
       <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-400">
         <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />

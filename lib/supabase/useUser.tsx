@@ -1,11 +1,22 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { SUPABASE_ENABLED, createClient } from "./client";
 
-export function useUser() {
+type UserContextValue = {
+  user: User | null;
+  loading: boolean;
+  enabled: boolean;
+  signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
+  signOut: () => Promise<void>;
+};
+
+const UserContext = createContext<UserContextValue | null>(null);
+
+// 앱 전체에서 Supabase 세션을 한 번만 구독 (컴포넌트마다 클라이언트/리스너 생성 방지)
+export function UserProvider({ children }: { children: React.ReactNode }) {
   const supabase = useMemo(() => (SUPABASE_ENABLED ? createClient() : null), []);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,5 +53,16 @@ export function useUser() {
     await supabase?.auth.signOut();
   }, [supabase]);
 
-  return { user, loading, enabled: SUPABASE_ENABLED, signInWithEmail, signOut };
+  const value = useMemo(
+    () => ({ user, loading, enabled: SUPABASE_ENABLED, signInWithEmail, signOut }),
+    [user, loading, signInWithEmail, signOut],
+  );
+
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+}
+
+export function useUser(): UserContextValue {
+  const ctx = useContext(UserContext);
+  if (!ctx) throw new Error("useUser must be used within UserProvider");
+  return ctx;
 }

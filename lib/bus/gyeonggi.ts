@@ -40,29 +40,6 @@ async function callGbis(path: string, params: Record<string, string>): Promise<a
   return parseResp(await res.text());
 }
 
-// 좌표 반경 500m 주변 정류소
-export async function getGyeonggiStopsNearby(
-  lat: number,
-  lng: number,
-  _radius: number,
-): Promise<Stop[]> {
-  const data = await callGbis("/busstationservice/v2/getBusStationAroundListv2", {
-    x: String(lng), // 경도
-    y: String(lat), // 위도
-  });
-  const items = toArray<any>(data?.response?.msgBody?.busStationAroundList);
-  return items
-    .map((it) => ({
-      id: String(it.stationId),
-      region: "gyeonggi" as const,
-      name: String(it.stationName),
-      lat: Number(it.y),
-      lng: Number(it.x),
-      stationNo: it.mobileNo ? String(it.mobileNo).trim() : undefined,
-    }))
-    .filter((s) => s.id && Number.isFinite(s.lat) && Number.isFinite(s.lng));
-}
-
 function mapStation(it: any): Stop {
   return {
     id: String(it.stationId),
@@ -86,6 +63,7 @@ export async function searchGyeonggiStops(keyword: string): Promise<Stop[]> {
 
 // 셀 단위 근접조회 캐시 (정류소는 불변)
 const CELL = 0.006; // 격자 셀 크기(도) ~ 500m
+const CELL_CACHE_MAX = 1000; // 캐시 상한 (초과 시 가장 오래된 항목부터 제거)
 const cellCache = new Map<string, Stop[]>();
 
 async function stopsInCell(cellLat: number, cellLng: number): Promise<Stop[]> {
@@ -100,6 +78,10 @@ async function stopsInCell(cellLat: number, cellLng: number): Promise<Stop[]> {
     .map(mapStation)
     .filter(validStop);
   cellCache.set(key, stops);
+  // LRU 상한: Map 은 삽입 순서를 보존하므로 가장 오래된 키부터 제거
+  if (cellCache.size > CELL_CACHE_MAX) {
+    cellCache.delete(cellCache.keys().next().value!);
+  }
   return stops;
 }
 
@@ -114,11 +96,19 @@ export async function getGyeonggiStopsInBounds(
       cells.push([(la + 0.5) * CELL, (ln + 0.5) * CELL]);
     }
   }
-  if (cells.length > 24) cells.length = 24; // 호출량 안전 상한
+  const MAX_CELLS = 24; // 호출량 안전 상한
+  if (cells.length > MAX_CELLS) {
+    console.warn(`[gyeonggi] bounds 셀 ${cells.length}개 → ${MAX_CELLS}개로 제한 (일부 영역 미조회)`);
+    cells.length = MAX_CELLS;
+  }
 
-  const results = await Promise.all(cells.map(([la, ln]) => stopsInCell(la, ln)));
+  // 셀 하나가 실패해도 나머지는 반영 (allSettled)
+  const results = await Promise.allSettled(cells.map(([la, ln]) => stopsInCell(la, ln)));
   const byId = new Map<string, Stop>();
-  results.flat().forEach((s) => byId.set(s.id, s));
+  for (const r of results) {
+    if (r.status === "fulfilled") r.value.forEach((s) => byId.set(s.id, s));
+    else console.error("[gyeonggi] 셀 조회 실패:", r.reason);
+  }
   return [...byId.values()];
 }
 

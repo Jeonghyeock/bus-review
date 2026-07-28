@@ -12,6 +12,11 @@ export async function GET(req: NextRequest) {
   if ([swLat, swLng, neLat, neLng].some((n) => !Number.isFinite(n))) {
     return NextResponse.json({ stops: [] });
   }
-  const stops = await getStopsInBounds({ lat: swLat, lng: swLng }, { lat: neLat, lng: neLng });
-  return NextResponse.json({ stops });
+  try {
+    const stops = await getStopsInBounds({ lat: swLat, lng: swLng }, { lat: neLat, lng: neLng });
+    return NextResponse.json({ stops });
+  } catch (e) {
+    console.error("[api] stops/in-view 실패:", e);
+    return NextResponse.json({ stops: [] });
+  }
 }

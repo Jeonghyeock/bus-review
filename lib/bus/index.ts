@@ -7,7 +7,6 @@ import {
   getGyeonggiRoutePath,
   getGyeonggiRouteStations,
   getGyeonggiStopsInBounds,
-  getGyeonggiStopsNearby,
   searchGyeonggiStops,
 } from "./gyeonggi";
 import { MOCK_STOPS, mockArrivals } from "./mock";
@@ -15,11 +14,6 @@ import { mockBusPositions } from "./mockBuses";
 import type { Arrival, BusPosition, LatLng, RouteStation, Stop } from "./types";
 
 const USE_MOCK = process.env.BUS_USE_MOCK !== "false";
-
-export async function getStopsNearby(lat: number, lng: number, radius = 500): Promise<Stop[]> {
-  if (USE_MOCK) return MOCK_STOPS;
-  return getGyeonggiStopsNearby(lat, lng, radius);
-}
 
 // 보이는 지도 영역(bounds) 내 정류소 — 500m 셀 격자로 넓게 커버
 export async function getStopsInBounds(

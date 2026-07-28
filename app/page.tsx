@@ -113,7 +113,10 @@ export default function Home() {
       const slat = Number(p.get("slat"));
       const slng = Number(p.get("slng"));
       setSelected({ id: p.get("stop")!, name: p.get("sname") ?? "정류소", lat: slat, lng: slng, region });
-      if (Number.isFinite(slat) && Number.isFinite(slng)) setPendingCenter({ lat: slat, lng: slng });
+      // 좌표 누락(0,0)이면 이동 생략 — 바다로 튀는 것 방지
+      if (Number.isFinite(slat) && Number.isFinite(slng) && (slat !== 0 || slng !== 0)) {
+        setPendingCenter({ lat: slat, lng: slng });
+      }
     } else if (navigator.geolocation) {
       // 딥링크가 없으면 현재 위치로 (거부/실패 시 기본 수원역 유지)
       navigator.geolocation.getCurrentPosition(

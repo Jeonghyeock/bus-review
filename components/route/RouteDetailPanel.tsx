@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 
+import type { RouteStation } from "@/lib/bus/types";
 import type { SelectedRoute } from "@/store/mapStore";
 
 import RouteStopList from "./RouteStopList";
@@ -10,9 +11,11 @@ import RouteStopList from "./RouteStopList";
 export default function RouteDetailPanel({
   route,
   onClose,
+  onSelectStation,
 }: {
   route: SelectedRoute;
   onClose: () => void;
+  onSelectStation?: (station: RouteStation) => void;
 }) {
   return (
     <div className="absolute bottom-4 left-[calc(380px+2rem)] top-4 z-10 flex w-[320px] flex-col rounded-2xl bg-white shadow-xl">
@@ -26,7 +29,7 @@ export default function RouteDetailPanel({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        <RouteStopList routeId={route.id} />
+        <RouteStopList routeId={route.id} onSelectStation={onSelectStation} />
       </div>
     </div>
   );

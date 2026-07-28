@@ -1,7 +1,7 @@
 "use client";
 
-import { useAtom } from "jotai";
-import { useState } from "react";
+import { useAtom, useSetAtom } from "jotai";
+import { useEffect, useState } from "react";
 
 import BusMarkers from "@/components/map/BusMarkers";
 import MyLocationButton from "@/components/map/MyLocationButton";
@@ -14,9 +14,14 @@ import BottomSheet from "@/components/sheet/BottomSheet";
 import RoutePanel from "@/components/sheet/RoutePanel";
 import StopPanel from "@/components/sheet/StopPanel";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import type { Stop } from "@/lib/bus/types";
+import type { RouteStation, Stop } from "@/lib/bus/types";
 import { type Bounds, useStopsInView } from "@/lib/query/useStopsInView";
-import { mapCenterAtom, selectedRouteAtom, selectedStopAtom } from "@/store/mapStore";
+import {
+  mapCenterAtom,
+  selectedBusIdAtom,
+  selectedRouteAtom,
+  selectedStopAtom,
+} from "@/store/mapStore";
 
 const MIN_ZOOM = 14;
 
@@ -27,7 +32,13 @@ export default function Home() {
   const [map, setMap] = useState<unknown>(null);
   const [zoom, setZoom] = useState(15);
   const [bounds, setBounds] = useState<Bounds | null>(null);
+  const setSelectedBusId = useSetAtom(selectedBusIdAtom);
   const isDesktop = useMediaQuery("(min-width: 768px)");
+
+  // 노선이 바뀌면 이전 버스 선택 해제
+  useEffect(() => {
+    setSelectedBusId(null);
+  }, [selectedRoute, setSelectedBusId]);
 
   const canLoad = zoom >= MIN_ZOOM;
   const { data } = useStopsInView(bounds, canLoad);
@@ -54,8 +65,16 @@ export default function Home() {
     handleSelectStop(stop);
   };
 
+  // 노선도의 정류소 클릭 → 지도 이동
+  const handleStationClick = (st: RouteStation) => moveTo(st.lat, st.lng);
+
   const content = selectedRoute ? (
-    <RoutePanel route={selectedRoute} onBack={() => setSelectedRoute(null)} showStops={!isDesktop} />
+    <RoutePanel
+      route={selectedRoute}
+      onBack={() => setSelectedRoute(null)}
+      showStops={!isDesktop}
+      onSelectStation={handleStationClick}
+    />
   ) : selected ? (
     <StopPanel stop={selected} onBack={() => setSelected(null)} />
   ) : (
@@ -103,7 +122,11 @@ export default function Home() {
 
       {/* 데스크톱: 노선 선택 시 사이드바 오른쪽에 노선도 패널 */}
       {isDesktop && selectedRoute && (
-        <RouteDetailPanel route={selectedRoute} onClose={() => setSelectedRoute(null)} />
+        <RouteDetailPanel
+          route={selectedRoute}
+          onClose={() => setSelectedRoute(null)}
+          onSelectStation={handleStationClick}
+        />
       )}
 
       <div className="relative flex-1">

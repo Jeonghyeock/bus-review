@@ -4,16 +4,19 @@ import { ArrowLeft, Bus } from "lucide-react";
 
 import ReviewSection from "@/components/review/ReviewSection";
 import RouteStopList from "@/components/route/RouteStopList";
+import type { RouteStation } from "@/lib/bus/types";
 import type { SelectedRoute } from "@/store/mapStore";
 
 export default function RoutePanel({
   route,
   onBack,
   showStops = false,
+  onSelectStation,
 }: {
   route: SelectedRoute;
   onBack: () => void;
   showStops?: boolean;
+  onSelectStation?: (station: RouteStation) => void;
 }) {
   return (
     <div>
@@ -41,7 +44,7 @@ export default function RoutePanel({
       {showStops && (
         <div className="mt-4 border-t border-gray-100 pt-4">
           <h3 className="mb-2 font-bold text-gray-900">노선도</h3>
-          <RouteStopList routeId={route.id} />
+          <RouteStopList routeId={route.id} onSelectStation={onSelectStation} />
         </div>
       )}
 

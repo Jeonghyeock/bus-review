@@ -1,16 +1,27 @@
 "use client";
 
+import { useAtomValue } from "jotai";
 import { Bus } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 import { CROWDED_COLOR, CROWDED_LABEL } from "@/lib/bus/labels";
-import type { BusPosition } from "@/lib/bus/types";
+import type { BusPosition, RouteStation } from "@/lib/bus/types";
 import { useBusPositions } from "@/lib/query/useBusPositions";
 import { useRouteStations } from "@/lib/query/useRouteStations";
+import { selectedBusIdAtom } from "@/store/mapStore";
 
 // 노선의 전체 정류소를 순서대로 나열하고, 각 버스가 있는 정류소에 🚌 표시 (네이버지도 노선도)
-export default function RouteStopList({ routeId }: { routeId: string }) {
+export default function RouteStopList({
+  routeId,
+  onSelectStation,
+}: {
+  routeId: string;
+  onSelectStation?: (station: RouteStation) => void;
+}) {
   const { data: stations, isPending } = useRouteStations(routeId);
   const { data: buses } = useBusPositions(routeId);
+  const selectedBusId = useAtomValue(selectedBusIdAtom);
+  const rowRef = useRef<HTMLLIElement | null>(null);
 
   const busBySeq = new Map<number, BusPosition[]>();
   buses?.forEach((b) => {
@@ -19,6 +30,13 @@ export default function RouteStopList({ routeId }: { routeId: string }) {
     arr.push(b);
     busBySeq.set(b.stationSeq, arr);
   });
+
+  const selectedSeq = buses?.find((b) => b.id === selectedBusId)?.stationSeq;
+
+  // 지도에서 버스 클릭 시 해당 정류소로 스크롤
+  useEffect(() => {
+    if (selectedBusId) rowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [selectedBusId]);
 
   if (isPending) return <p className="text-sm text-gray-400">노선 정보를 불러오는 중…</p>;
   if (!stations?.length) return <p className="text-sm text-gray-400">노선 정보가 없어요</p>;
@@ -31,26 +49,35 @@ export default function RouteStopList({ routeId }: { routeId: string }) {
       <ol>
         {stations.map((st) => {
           const here = busBySeq.get(st.seq) ?? [];
+          const isSelected = selectedSeq != null && st.seq === selectedSeq;
           return (
-            <li key={`${st.seq}-${st.id}`} className="flex items-stretch gap-2.5">
+            <li
+              key={`${st.seq}-${st.id}`}
+              ref={isSelected ? rowRef : undefined}
+              className={`flex items-stretch gap-2.5 rounded-lg ${isSelected ? "bg-blue-50" : ""}`}
+            >
               <span className="relative flex w-3 shrink-0 justify-center">
                 <span className="absolute inset-y-0 w-0.5 bg-gray-200" />
                 <span className="relative z-10 mt-2 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-gray-300" />
               </span>
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1">
-                <span className="truncate text-sm text-gray-700">{st.name}</span>
+              <button
+                onClick={() => onSelectStation?.(st)}
+                className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1 text-left"
+              >
+                <span className="truncate text-sm text-gray-700 hover:text-blue-600">{st.name}</span>
                 <span className="flex shrink-0 items-center gap-1">
                   {here.map((b) => (
                     <span
                       key={b.id}
                       title={`${b.plateNo ?? ""}${b.crowded ? ` · ${CROWDED_LABEL[b.crowded]}` : ""}`}
+                      className={b.id === selectedBusId ? "rounded-full bg-blue-100 p-0.5" : ""}
                       style={{ color: b.crowded ? CROWDED_COLOR[b.crowded] : "#2563eb" }}
                     >
                       <Bus size={16} />
                     </span>
                   ))}
                 </span>
-              </div>
+              </button>
             </li>
           );
         })}

@@ -1,14 +1,17 @@
 "use client";
 
+import { useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 
 import { CROWDED_COLOR, CROWDED_LABEL } from "@/lib/bus/labels";
 import { useBusPositions } from "@/lib/query/useBusPositions";
+import { selectedBusIdAtom } from "@/store/mapStore";
 
 // 선택된 노선의 실시간 버스 위치를 지도에 표시 (15초 폴링).
 export default function BusMarkers({ map, routeId }: { map: unknown; routeId: string }) {
   const markersRef = useRef<any[]>([]);
   const { data: buses } = useBusPositions(routeId);
+  const setSelectedBusId = useSetAtom(selectedBusIdAtom);
 
   useEffect(() => {
     if (!map || !window.naver?.maps || !buses) return;
@@ -21,7 +24,7 @@ export default function BusMarkers({ map, routeId }: { map: unknown; routeId: st
         (b.plateNo ?? "") +
         (b.crowded ? ` · ${CROWDED_LABEL[b.crowded]}` : "") +
         (b.remainSeats != null ? ` · ${b.remainSeats}석` : "");
-      return new naver.maps.Marker({
+      const marker = new naver.maps.Marker({
         position: new naver.maps.LatLng(b.lat, b.lng),
         map,
         title: tip,
@@ -30,6 +33,8 @@ export default function BusMarkers({ map, routeId }: { map: unknown; routeId: st
           anchor: new naver.maps.Point(12, 12),
         },
       });
+      naver.maps.Event.addListener(marker, "click", () => setSelectedBusId(b.id));
+      return marker;
     });
 
     return () => {

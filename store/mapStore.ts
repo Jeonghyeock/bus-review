@@ -11,3 +11,6 @@ export const selectedStopAtom = atom<Stop | null>(null);
 // 현재 선택된 노선 (노선 리뷰 패널)
 export type SelectedRoute = { id: string; name: string; region: Region };
 export const selectedRouteAtom = atom<SelectedRoute | null>(null);
+
+// 지도에서 클릭한 버스 (노선도에서 하이라이트/스크롤용)
+export const selectedBusIdAtom = atom<string | null>(null);

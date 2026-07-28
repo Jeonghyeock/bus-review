@@ -8,6 +8,7 @@ import MyLocationButton from "@/components/map/MyLocationButton";
 import NaverMap from "@/components/map/NaverMap";
 import RoutePolyline from "@/components/map/RoutePolyline";
 import StopMarkers from "@/components/map/StopMarkers";
+import RouteDetailPanel from "@/components/route/RouteDetailPanel";
 import SearchBar from "@/components/search/SearchBar";
 import BottomSheet from "@/components/sheet/BottomSheet";
 import RoutePanel from "@/components/sheet/RoutePanel";
@@ -54,7 +55,7 @@ export default function Home() {
   };
 
   const content = selectedRoute ? (
-    <RoutePanel route={selectedRoute} onBack={() => setSelectedRoute(null)} />
+    <RoutePanel route={selectedRoute} onBack={() => setSelectedRoute(null)} showStops={!isDesktop} />
   ) : selected ? (
     <StopPanel stop={selected} onBack={() => setSelected(null)} />
   ) : (
@@ -98,6 +99,11 @@ export default function Home() {
           {searchEl}
           <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
         </aside>
+      )}
+
+      {/* 데스크톱: 노선 선택 시 사이드바 오른쪽에 노선도 패널 */}
+      {isDesktop && selectedRoute && (
+        <RouteDetailPanel route={selectedRoute} onClose={() => setSelectedRoute(null)} />
       )}
 
       <div className="relative flex-1">

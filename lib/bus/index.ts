@@ -5,13 +5,14 @@ import {
   getGyeonggiArrivals,
   getGyeonggiBusPositions,
   getGyeonggiRoutePath,
+  getGyeonggiRouteStations,
   getGyeonggiStopsInBounds,
   getGyeonggiStopsNearby,
   searchGyeonggiStops,
 } from "./gyeonggi";
 import { MOCK_STOPS, mockArrivals } from "./mock";
 import { mockBusPositions } from "./mockBuses";
-import type { Arrival, BusPosition, LatLng, Stop } from "./types";
+import type { Arrival, BusPosition, LatLng, RouteStation, Stop } from "./types";
 
 const USE_MOCK = process.env.BUS_USE_MOCK !== "false";
 
@@ -47,4 +48,9 @@ export async function searchStops(keyword: string): Promise<Stop[]> {
 export async function getRoutePath(routeId: string): Promise<LatLng[]> {
   if (USE_MOCK) return [];
   return getGyeonggiRoutePath(routeId);
+}
+
+export async function getRouteStations(routeId: string): Promise<RouteStation[]> {
+  if (USE_MOCK) return [];
+  return getGyeonggiRouteStations(routeId);
 }

@@ -4,7 +4,7 @@
 import { XMLParser } from "fast-xml-parser";
 
 import { ROUTE_TYPE } from "./labels";
-import type { Arrival, BusPosition, LatLng, Stop } from "./types";
+import type { Arrival, BusPosition, LatLng, RouteStation, Stop } from "./types";
 
 const BASE = "https://apis.data.go.kr/6410000";
 const xml = new XMLParser({ ignoreAttributes: true, parseTagValue: true });
@@ -174,6 +174,21 @@ async function stationCoord(stationId: string): Promise<{ lat: number; lng: numb
   }
 }
 
+// 노선 경유 정류소 목록(순번순)
+export async function getGyeonggiRouteStations(routeId: string): Promise<RouteStation[]> {
+  const data = await callGbis("/busrouteservice/v2/getBusRouteStationListv2", { routeId });
+  return toArray<any>(data?.response?.msgBody?.busRouteStationList)
+    .map((it) => ({
+      id: String(it.stationId),
+      name: String(it.stationName),
+      seq: Number(it.stationSeq),
+      lat: Number(it.y),
+      lng: Number(it.x),
+    }))
+    .filter((s) => Number.isFinite(s.seq))
+    .sort((a, b) => a.seq - b.seq);
+}
+
 // 노선 형상(경로) 좌표 — 도로를 따라가는 폴리라인용.
 export async function getGyeonggiRoutePath(routeId: string): Promise<LatLng[]> {
   const data = await callGbis("/busrouteservice/v2/getBusRouteLineListv2", { routeId });
@@ -204,6 +219,7 @@ export async function getGyeonggiBusPositions(routeId: string): Promise<BusPosit
       crowded: num(b.crowded),
       remainSeats: seats != null && seats >= 0 ? seats : undefined,
       lowPlate: Number(b.lowPlate) === 1,
+      stationSeq: num(b.stationSeq),
     });
   });
   return result;

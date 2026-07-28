@@ -46,6 +46,16 @@ export type BusPosition = {
   crowded?: number; // 혼잡도 1~4
   remainSeats?: number; // 빈자리 수
   lowPlate?: boolean; // 저상버스
+  stationSeq?: number; // 노선상 현재 정류소 순번
+};
+
+// 노선 경유 정류소(순번 포함)
+export type RouteStation = {
+  id: string;
+  name: string;
+  seq: number;
+  lat: number;
+  lng: number;
 };
 
 // 리뷰 대상: 노선 또는 정류장

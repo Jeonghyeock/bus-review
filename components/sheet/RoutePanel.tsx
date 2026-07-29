@@ -61,7 +61,11 @@ export default function RoutePanel({
       {showStops && (
         <div className="mt-4 border-t border-gray-100 pt-4">
           <h3 className="mb-2 font-bold text-gray-900">노선도</h3>
-          <RouteStopList routeId={route.id} onSelectStation={onSelectStation} />
+          <RouteStopList
+            routeId={route.id}
+            onSelectStation={onSelectStation}
+            highlightStopId={route.fromStopId}
+          />
         </div>
       )}
 

@@ -2,6 +2,7 @@
 
 import { useSetAtom } from "jotai";
 import { ArrowLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
 
 import FavoriteButton from "@/components/common/FavoriteButton";
 import ShareButton from "@/components/common/ShareButton";
@@ -14,6 +15,17 @@ import { selectedRouteAtom } from "@/store/mapStore";
 export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => void }) {
   const { data: arrivals, isPending, isError } = useArrivals(stop.id);
   const setRoute = useSetAtom(selectedRouteAtom);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // 지도에서 이 노선 전체 보기 — 출발 정류장 컨텍스트를 함께 넘겨 노선도에서 하이라이트
+  const openRoute = (routeId: string, routeName: string) =>
+    setRoute({
+      id: routeId,
+      name: routeName,
+      region: stop.region,
+      fromStopId: stop.id,
+      fromStopName: stop.name,
+    });
 
   return (
     <div>
@@ -68,47 +80,90 @@ export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => 
             도착 예정 버스가 없어요
           </li>
         )}
-        {arrivals?.map((a) => (
-          <li key={a.routeId}>
-            <button
-              onClick={() => setRoute({ id: a.routeId, name: a.routeName, region: stop.region })}
-              className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 text-left transition hover:border-blue-200 hover:bg-blue-50/40"
-              title="노선 리뷰 보기"
+        {arrivals?.map((a) => {
+          const isOpen = expandedId === a.routeId;
+          return (
+            <li
+              key={a.routeId}
+              className={`overflow-hidden rounded-xl border transition ${isOpen ? "border-blue-200" : "border-gray-100"}`}
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-gray-900">{a.routeName}</span>
-                  {a.routeType && <span className="text-[10px] text-gray-400">{a.routeType}</span>}
-                  {a.lowPlate && (
-                    <span className="rounded bg-emerald-50 px-1 text-[10px] text-emerald-600">
-                      저상
-                    </span>
-                  )}
-                </div>
-                {a.destName && <div className="truncate text-xs text-gray-400">→ {a.destName}</div>}
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="text-right">
-                  <div className="text-sm font-medium text-blue-600">
-                    {a.message ?? `${a.predictMinutes}분`}
-                  </div>
-                  <div className="flex items-center justify-end gap-1.5 text-[10px]">
-                    {a.remainStops != null && (
-                      <span className="text-gray-400">{a.remainStops}정거장</span>
-                    )}
-                    {a.crowded && (
-                      <span style={{ color: CROWDED_COLOR[a.crowded] }}>
-                        {CROWDED_LABEL[a.crowded]}
+              <button
+                onClick={() => setExpandedId(isOpen ? null : a.routeId)}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-blue-50/40"
+                title="도착 상세 · 이 정류장의 이 노선 리뷰"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-gray-900">{a.routeName}</span>
+                    {a.routeType && <span className="text-[10px] text-gray-400">{a.routeType}</span>}
+                    {a.lowPlate && (
+                      <span className="rounded bg-emerald-50 px-1 text-[10px] text-emerald-600">
+                        저상
                       </span>
                     )}
-                    {a.remainSeats != null && <span className="text-gray-400">{a.remainSeats}석</span>}
                   </div>
+                  {a.destName && <div className="truncate text-xs text-gray-400">→ {a.destName}</div>}
                 </div>
-                <ChevronRight size={16} className="shrink-0 text-gray-300" />
-              </div>
-            </button>
-          </li>
-        ))}
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-blue-600">
+                      {a.message ?? `${a.predictMinutes}분`}
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5 text-[10px]">
+                      {a.remainStops != null && (
+                        <span className="text-gray-400">{a.remainStops}정거장</span>
+                      )}
+                      {a.crowded && (
+                        <span style={{ color: CROWDED_COLOR[a.crowded] }}>
+                          {CROWDED_LABEL[a.crowded]}
+                        </span>
+                      )}
+                      {a.remainSeats != null && (
+                        <span className="text-gray-400">{a.remainSeats}석</span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight
+                    size={16}
+                    className={`shrink-0 text-gray-300 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                  />
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="border-t border-gray-100 px-3 py-3">
+                  {/* 도착 상세 */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                    <span className="font-medium text-gray-700">
+                      {a.message ?? `${a.predictMinutes}분 후 도착`}
+                    </span>
+                    {a.next && (
+                      <span>
+                        다음 차 {a.next.predictMinutes}분
+                        {a.next.remainStops != null ? ` · ${a.next.remainStops}정거장` : ""}
+                      </span>
+                    )}
+                    {a.plateNo && <span>차량 {a.plateNo}</span>}
+                  </div>
+
+                  <button
+                    onClick={() => openRoute(a.routeId, a.routeName)}
+                    className="mt-2 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    지도에서 이 노선 전체 보기 <ChevronRight size={13} />
+                  </button>
+
+                  {/* 이 정류장 × 이 노선 리뷰 */}
+                  <ReviewSection
+                    targetType="stop_route"
+                    targetId={`${stop.id}:${a.routeId}`}
+                    region={stop.region}
+                  />
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       <ReviewSection targetType="stop" targetId={stop.id} region={stop.region} />

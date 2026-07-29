@@ -22,14 +22,20 @@ export default function RouteDetailPanel({
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <div>
           <h3 className="font-bold text-gray-900">{route.name}</h3>
-          <p className="text-xs text-gray-400">노선도 · 실시간 버스 위치</p>
+          <p className="text-xs text-gray-400">
+            {route.fromStopName ? `${route.fromStopName} 기준 · 실시간 버스` : "노선도 · 실시간 버스 위치"}
+          </p>
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="닫기">
           <X size={18} />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        <RouteStopList routeId={route.id} onSelectStation={onSelectStation} />
+        <RouteStopList
+          routeId={route.id}
+          onSelectStation={onSelectStation}
+          highlightStopId={route.fromStopId}
+        />
       </div>
     </div>
   );

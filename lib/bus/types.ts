@@ -58,5 +58,5 @@ export type RouteStation = {
   lng: number;
 };
 
-// 리뷰 대상: 노선 또는 정류장
-export type ReviewTargetType = "route" | "stop";
+// 리뷰 대상: 노선 / 정류장 / 정류장×노선 조합(target_id = "정류장ID:노선ID")
+export type ReviewTargetType = "route" | "stop" | "stop_route";

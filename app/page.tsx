@@ -224,7 +224,13 @@ export default function Home() {
       <div className="relative flex-1">
         <NaverMap center={center} onReady={setMap} onIdle={handleIdle} />
         {!!map && stops && (
-          <StopMarkers map={map} stops={stops} zoom={zoom} onSelect={handleSelectStop} />
+          <StopMarkers
+            map={map}
+            stops={stops}
+            zoom={zoom}
+            onSelect={handleSelectStop}
+            selectedStopId={selected?.id}
+          />
         )}
         {!!map && selectedRoute && <RoutePolyline map={map} routeId={selectedRoute.id} />}
         {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}

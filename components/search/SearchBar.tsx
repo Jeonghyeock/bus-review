@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Stop } from "@/lib/bus/types";
 import { useStopSearch } from "@/lib/query/useStopSearch";
@@ -11,14 +11,24 @@ export default function SearchBar({ onSelect }: { onSelect: (stop: Stop) => void
   const [debounced, setDebounced] = useState("");
   const [open, setOpen] = useState(false);
   const { data: results, isFetching } = useStopSearch(debounced);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(input.trim()), 300);
     return () => clearTimeout(t);
   }, [input]);
 
+  // 바깥 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
   return (
-    <div className="relative w-full">
+    <div ref={rootRef} className="relative w-full">
       <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-white px-3.5 py-2.5 shadow-lg">
         <Search size={18} className="shrink-0 text-gray-400" />
         <input

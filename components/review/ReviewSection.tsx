@@ -12,10 +12,12 @@ export default function ReviewSection({
   targetType,
   targetId,
   region,
+  title = "리뷰",
 }: {
   targetType: ReviewTargetType;
   targetId: string;
   region: Region;
+  title?: string;
 }) {
   const { user, enabled, signInWithEmail, signOut } = useUser();
   const { data: reviews, isPending } = useReviews(targetType, targetId);
@@ -60,7 +62,9 @@ export default function ReviewSection({
   return (
     <div className="mt-5 border-t border-gray-100 pt-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold text-gray-900">리뷰 {reviews ? `${reviews.length}` : ""}</h3>
+        <h3 className="font-bold text-gray-900">
+          {title} {reviews ? `${reviews.length}` : ""}
+        </h3>
         {avg && (
           <span className="flex items-center gap-1 text-sm font-medium text-amber-500">
             ★ {avg}

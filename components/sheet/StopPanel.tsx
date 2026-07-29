@@ -158,6 +158,7 @@ export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => 
                     targetType="stop_route"
                     targetId={`${stop.id}:${a.routeId}`}
                     region={stop.region}
+                    title="이 노선 리뷰"
                   />
                 </div>
               )}
@@ -166,7 +167,12 @@ export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => 
         })}
       </ul>
 
-      <ReviewSection targetType="stop" targetId={stop.id} region={stop.region} />
+      <ReviewSection
+        targetType="stop"
+        targetId={stop.id}
+        region={stop.region}
+        title="정류장 리뷰"
+      />
     </div>
   );
 }

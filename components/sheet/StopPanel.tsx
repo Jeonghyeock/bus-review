@@ -10,11 +10,12 @@ import ReviewSection from "@/components/review/ReviewSection";
 import { CROWDED_COLOR, CROWDED_LABEL } from "@/lib/bus/labels";
 import type { Stop } from "@/lib/bus/types";
 import { useArrivals } from "@/lib/query/useArrivals";
-import { selectedRouteAtom } from "@/store/mapStore";
+import { selectedRouteAtom, sheetExpandSignalAtom } from "@/store/mapStore";
 
 export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => void }) {
   const { data: arrivals, isPending, isError } = useArrivals(stop.id);
   const setRoute = useSetAtom(selectedRouteAtom);
+  const bumpSheet = useSetAtom(sheetExpandSignalAtom);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // 지도에서 이 노선 전체 보기 — 출발 정류장 컨텍스트를 함께 넘겨 노선도에서 하이라이트
@@ -88,7 +89,11 @@ export default function StopPanel({ stop, onBack }: { stop: Stop; onBack: () => 
               className={`overflow-hidden rounded-xl border transition ${isOpen ? "border-blue-200" : "border-gray-100"}`}
             >
               <button
-                onClick={() => setExpandedId(isOpen ? null : a.routeId)}
+                onClick={() => {
+                  const next = isOpen ? null : a.routeId;
+                  setExpandedId(next);
+                  if (next) bumpSheet((n) => n + 1); // 모바일 바텀시트 자동 펼침
+                }}
                 className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-blue-50/40"
                 title="도착 상세 · 이 정류장의 이 노선 리뷰"
               >

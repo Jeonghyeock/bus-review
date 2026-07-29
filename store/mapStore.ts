@@ -20,3 +20,6 @@ export const selectedRouteAtom = atom<SelectedRoute | null>(null);
 
 // 지도에서 클릭한 버스 (노선도에서 하이라이트/스크롤용)
 export const selectedBusIdAtom = atom<string | null>(null);
+
+// 바텀시트 펼침 요청 신호 — 값이 증가하면 시트를 펼친다 (모바일에서 상세 확장 시)
+export const sheetExpandSignalAtom = atom(0);

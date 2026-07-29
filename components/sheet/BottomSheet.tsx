@@ -1,6 +1,9 @@
 "use client";
 
+import { useAtomValue } from "jotai";
 import { useEffect, useRef, useState } from "react";
+
+import { sheetExpandSignalAtom } from "@/store/mapStore";
 
 const COLLAPSED = 56; // 접힌 높이(px) — 핸들만 보임
 
@@ -10,6 +13,8 @@ export default function BottomSheet({ children }: { children: React.ReactNode })
   const [height, setHeight] = useState(600);
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ startY: number; startH: number; moved: boolean } | null>(null);
+  const expandSignal = useAtomValue(sheetExpandSignalAtom);
+  const firstSignal = useRef(true);
 
   useEffect(() => {
     const calc = () => {
@@ -21,6 +26,16 @@ export default function BottomSheet({ children }: { children: React.ReactNode })
     window.addEventListener("resize", calc);
     return () => window.removeEventListener("resize", calc);
   }, []);
+
+  // 상세 확장 등 외부 요청 시 시트를 펼침 (최초 마운트는 무시)
+  useEffect(() => {
+    if (firstSignal.current) {
+      firstSignal.current = false;
+      return;
+    }
+    setHeight(maxH);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandSignal]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);

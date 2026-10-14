@@ -65,9 +65,8 @@ export default function NaverMap({
           center: new window.naver.maps.LatLng(center.lat, center.lng),
           zoom: 15,
         });
-        onReady?.(map);
-        // 이동/줌 완료 시 새 중심 좌표를 알림 (그 지역 정류소 재조회용)
-        window.naver.maps.Event.addListener(map, "idle", () => {
+        // 지금 보이는 영역을 알린다 (그 지역 정류소 조회용)
+        const emitView = () => {
           const c = map.getCenter();
           const b = map.getBounds();
           const sw = b.getSW();
@@ -78,6 +77,16 @@ export default function NaverMap({
             zoom: map.getZoom(),
             bounds: { swLat: sw.lat(), swLng: sw.lng(), neLat: ne.lat(), neLng: ne.lng() },
           });
+        };
+        // 이동/줌이 끝날 때마다 알림
+        window.naver.maps.Event.addListener(map, "idle", emitView);
+        // 첫 화면에서는 idle 이 오지 않는다(init·tilesloaded 만 온다). 준비가 끝나면 한 번 알리고,
+        // 지도도 그때 넘겨서 준비 전에 panTo 가 불리지 않게 한다 — 준비 전에 이동하면 idle 없이 위치만 바뀐다.
+        const initListener = window.naver.maps.Event.addListener(map, "init", () => {
+          window.naver.maps.Event.removeListener(initListener);
+          if (cancelled) return;
+          onReady?.(map);
+          emitView();
         });
         // 컨테이너 크기 변화(반응형 레이아웃/창 리사이즈) 시 지도 재정렬
         roRef.current = new ResizeObserver(() => {

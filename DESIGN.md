@@ -5,7 +5,7 @@
 
 이직용 포트폴리오. 증명 목표: **지도 SDK · 공공 API 실시간 데이터 · 풀스택 CRUD/인증 · 성능(클러스터링·캐싱) · 깔끔한 UX**.
 
-> 📌 이 문서는 **초기 설계**다. 실제 구현·현재 구조/기능은 [`README.md`](./README.md)가 기준. (구현하며 달라진 부분: 서울 TOPIS 보류 → 경기 GBIS 라이브, 주변조회를 셀 격자 스트리밍으로, shadcn 미사용 등)
+> 📌 이 문서는 **초기 설계**다. 실제 구현·현재 구조/기능은 [`README.md`](./README.md)가 기준. (구현하며 달라진 부분: 서울 TOPIS 보류 → 경기 GBIS 라이브, 주변조회를 셀 격자 스트리밍으로, 검색은 정류장만(노선 검색 미구현), 정류장×노선 리뷰 추가(`0004`), shadcn 미사용 등)
 
 ---
 
@@ -103,11 +103,11 @@ GET /api/routes/:id/buses                          노선 실시간 버스 위�
 lib/bus/
   types.ts        # 공통 타입: Stop, Arrival, BusPosition, RouteStation
   gyeonggi.ts     # 경기(GBIS) API → 공통 타입 (셀 격자·스트리밍·429 대응)
-  index.ts        # region 보고 어댑터 선택 (streamStopsInBounds 등)
+  index.ts        # 진입점: 지금은 경기 어댑터 또는 목업을 부름 (streamStopsInBounds 등)
   labels.ts       # 혼잡도/노선유형 라벨·색상
   mock.ts / mockBuses.ts  # BUS_USE_MOCK 목업 데이터
 ```
-> 서울 어댑터(`seoul.ts`)는 TOPIS 인증키 이슈로 보류 상태라 현재 코드에는 없다. 복구 시 같은 인터페이스로 추가하면 `index.ts` 디스패치만 늘리면 된다.
+> 서울 어댑터(`seoul.ts`)는 TOPIS 인증키 이슈로 보류 상태라 현재 코드에는 없다. 붙일 때는 `index.ts` 함수들이 region 을 받아 어댑터를 고르게 하고(도착·노선), 지역을 미리 알 수 없는 주변 정류장·검색은 두 지역을 함께 조회해 합쳐야 한다.
 
 ---
 

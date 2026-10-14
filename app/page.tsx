@@ -57,6 +57,9 @@ export default function Home() {
   const moveTo = (lat: number, lng: number) => {
     if (map && window.naver?.maps) {
       (map as { panTo: (ll: unknown) => void }).panTo(new window.naver.maps.LatLng(lat, lng));
+    } else {
+      // 지도가 준비되기 전에 고른 위치(검색·즐겨찾기·현위치)는 버리지 않고 준비된 뒤에 이동한다
+      setPendingCenter({ lat, lng });
     }
   };
 

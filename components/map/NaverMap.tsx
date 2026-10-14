@@ -50,6 +50,8 @@ export default function NaverMap({
   const [error, setError] = useState<string | null>(null);
   const onIdleRef = useRef(onIdle);
   onIdleRef.current = onIdle;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const roRef = useRef<ResizeObserver | null>(null);
 
   useEffect(() => {
@@ -58,13 +60,16 @@ export default function NaverMap({
       return;
     }
     let cancelled = false;
+    let disposeMap: (() => void) | null = null;
     loadNaverScript()
       .then(() => {
         if (cancelled || !ref.current) return;
-        const map = new window.naver.maps.Map(ref.current, {
-          center: new window.naver.maps.LatLng(center.lat, center.lng),
+        const { maps } = window.naver;
+        const map = new maps.Map(ref.current, {
+          center: new maps.LatLng(center.lat, center.lng),
           zoom: 15,
         });
+        let ready = false;
         // 지금 보이는 영역을 알린다 (그 지역 정류소 조회용)
         const emitView = () => {
           const c = map.getCenter();
@@ -78,26 +83,39 @@ export default function NaverMap({
             bounds: { swLat: sw.lat(), swLng: sw.lng(), neLat: ne.lat(), neLng: ne.lng() },
           });
         };
-        // 이동/줌이 끝날 때마다 알림
-        window.naver.maps.Event.addListener(map, "idle", emitView);
         // 첫 화면에서는 idle 이 오지 않는다(init·tilesloaded 만 온다). 준비가 끝나면 한 번 알리고,
         // 지도도 그때 넘겨서 준비 전에 panTo 가 불리지 않게 한다 — 준비 전에 이동하면 idle 없이 위치만 바뀐다.
-        const initListener = window.naver.maps.Event.addListener(map, "init", () => {
-          window.naver.maps.Event.removeListener(initListener);
-          if (cancelled) return;
-          onReady?.(map);
+        const markReady = () => {
+          if (ready || cancelled) return;
+          ready = true;
+          onReadyRef.current?.(map);
           emitView();
+        };
+        maps.Event.once(map, "init", markReady);
+        // init 이 끝내 오지 않더라도(SDK 동작이 바뀌는 등) 지도를 못 쓰는 상태로 남지 않게 늦게라도 준비 처리
+        const readyFallback = setTimeout(markReady, 5000);
+        // 이동/줌이 끝날 때마다 알림
+        const idleListener = maps.Event.addListener(map, "idle", () => {
+          if (ready) emitView();
         });
-        // 컨테이너 크기 변화(반응형 레이아웃/창 리사이즈) 시 지도 재정렬
+        // 컨테이너 크기 변화(반응형 레이아웃/창 리사이즈) 시 지도를 재정렬하고, 넓어진 영역도 알림
         roRef.current = new ResizeObserver(() => {
-          if (window.naver?.maps) window.naver.maps.Event.trigger(map, "resize");
+          maps.Event.trigger(map, "resize");
+          if (ready) emitView();
         });
-        if (ref.current) roRef.current.observe(ref.current);
+        roRef.current.observe(ref.current);
+        // 언마운트 뒤에 남은 지도가 부모 콜백을 부르지 않게 리스너만 뗀다.
+        // map.destroy() 는 마커·경로선 컴포넌트가 아직 지도를 붙잡고 정리하는 중일 수 있어 부르지 않는다.
+        disposeMap = () => {
+          clearTimeout(readyFallback);
+          maps.Event.removeListener(idleListener);
+        };
       })
       .catch((e: Error) => setError(e.message));
     return () => {
       cancelled = true;
       roRef.current?.disconnect();
+      disposeMap?.();
     };
     // 지도는 최초 1회만 생성 (center 변경은 별도 로직으로 panTo)
     // eslint-disable-next-line react-hooks/exhaustive-deps

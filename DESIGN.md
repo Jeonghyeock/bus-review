@@ -67,6 +67,7 @@ reviews (
 create index on reviews (target_type, target_id);
 
 -- 표시용 캐시(선택): 리뷰 목록에서 노선/정류장 이름을 API 재호출 없이 보여주기
+-- (현재 코드에서 쓰지 않음 — 클라이언트 접근은 권한 회수 + RLS 로 막아 둠, 0005)
 bus_targets (
   target_type text, target_id text, region text,
   name text, meta jsonb,
@@ -81,6 +82,7 @@ favorites (user_id uuid, target_type text, target_id text, region text, name tex
 **RLS(Row Level Security)** — 어필 포인트:
 - `reviews` SELECT: 누구나
 - `reviews` INSERT/UPDATE/DELETE: `auth.uid() = user_id` 인 본인만
+- `bus_targets`: 클라이언트(anon·authenticated) 접근 없음 (쓰지 않는 테이블)
 - 평균 평점: `reviews`에서 집계(뷰 또는 쿼리 `avg(rating), count(*)`)
 
 ---

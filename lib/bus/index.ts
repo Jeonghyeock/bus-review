@@ -1,6 +1,6 @@
 // 버스 데이터 진입점. 지금은 경기(GBIS) 어댑터만 부른다.
-// 서울을 붙일 때는 region 을 받아 어댑터를 고르도록 바꾸고, API 라우트·쿼리 훅도 region 을 넘기게 한다.
-// 실 API 준비 전에는 BUS_USE_MOCK=true 로 목업 반환.
+// 서울을 붙일 때: 도착·노선 조회는 region 으로 어댑터를 고르고, 주변 정류장·검색은 두 지역을 함께 조회해 합친다.
+// BUS_USE_MOCK 가 "false" 가 아니면(값이 없어도) 목업을 반환한다.
 
 import {
   getGyeonggiArrivals,

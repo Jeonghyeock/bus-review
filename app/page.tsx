@@ -1,6 +1,7 @@
 "use client";
 
 import { useAtom, useSetAtom } from "jotai";
+import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import BusMarkers from "@/components/map/BusMarkers";
@@ -46,8 +47,10 @@ export default function Home() {
   }, [selectedRoute, setSelectedBusId]);
 
   const canLoad = zoom >= MIN_ZOOM;
-  const { data } = useStopsInView(bounds, canLoad);
+  const { data, initialLoading, error: stopsError } = useStopsInView(bounds, canLoad);
   const stops = canLoad ? data : [];
+  // 처음 들어왔을 때만 로딩을 보여 준다. 지도를 옮길 때는 이전 정류소를 둔 채 바뀌므로 띄우지 않는다.
+  const showInitialLoading = canLoad && initialLoading;
 
   const handleIdle = (v: { lat: number; lng: number; zoom: number; bounds: Bounds }) => {
     setZoom(v.zoom);
@@ -193,9 +196,17 @@ export default function Home() {
               </button>
             </li>
           ))}
-          {stops?.length === 0 && (
+          {showInitialLoading && (
+            <li className="flex items-center justify-center gap-2 rounded-xl bg-gray-50 py-6 text-sm text-gray-400">
+              <LoaderCircle size={16} className="animate-spin" aria-hidden />
+              주변 정류소를 불러오는 중…
+            </li>
+          )}
+          {!showInitialLoading && stops?.length === 0 && (
             <li className="rounded-xl bg-gray-50 py-6 text-center text-sm text-gray-400">
-              이 근처엔 정류소가 없어요. 지도를 옮겨보세요.
+              {stopsError
+                ? "정류소를 불러오지 못했어요. 지도를 옮기면 다시 불러와요."
+                : "이 근처엔 정류소가 없어요. 지도를 옮겨보세요."}
             </li>
           )}
         </ul>
@@ -238,6 +249,15 @@ export default function Home() {
         {!!map && selectedRoute && <RoutePolyline map={map} routeId={selectedRoute.id} />}
         {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}
         {!!map && myLocation && <MyLocationMarker map={map} position={myLocation} />}
+        {showInitialLoading && (
+          <div
+            role="status"
+            className={`pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-md ${isDesktop ? "top-3" : "top-[72px]"}`}
+          >
+            <LoaderCircle size={14} className="animate-spin text-blue-600" aria-hidden />
+            정류소 불러오는 중
+          </div>
+        )}
         <MyLocationButton
           onLocate={(lat, lng) => {
             moveTo(lat, lng);

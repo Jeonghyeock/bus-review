@@ -33,6 +33,9 @@ create table if not exists bus_targets (
   meta jsonb,
   primary key (target_type, target_id)
 );
+-- 앱 코드에서 쓰지 않는 테이블이라 클라이언트 역할의 접근을 막아 둔다 (이미 만든 DB 는 0005 로 같은 처리)
+alter table bus_targets enable row level security;
+revoke all on table bus_targets from anon, authenticated;
 
 -- 4) RLS — 리뷰는 누구나 읽고, 본인 것만 쓰기/수정/삭제
 alter table reviews enable row level security;

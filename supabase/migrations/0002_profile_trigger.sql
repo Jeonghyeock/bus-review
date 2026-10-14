@@ -14,7 +14,7 @@ begin
     coalesce(
       new.raw_user_meta_data ->> 'name',
       new.raw_user_meta_data ->> 'full_name',
-      split_part(new.email, '@', 1)
+      '익명-' || left(replace(new.id::text, '-', ''), 4) -- 이메일을 닉네임으로 쓰지 않는다 (기존 DB 는 0006)
     ),
     new.raw_user_meta_data ->> 'avatar_url'
   )

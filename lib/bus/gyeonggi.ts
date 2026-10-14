@@ -141,20 +141,24 @@ function cellsInBounds(
 }
 
 // 중심 셀부터 조회하고, 완료되는 셀마다 onCell 로 흘려보낸다 (동시 6개, 429 회피).
+// 실패한 셀은 건너뛰고 나머지를 계속 보내며, 몇 칸이 실패했는지 돌려준다('정류소 없음'과 '조회 실패'를 구분하려고).
 export async function streamGyeonggiStopsInBounds(
   sw: { lat: number; lng: number },
   ne: { lat: number; lng: number },
   onCell: (stops: Stop[]) => void,
-): Promise<void> {
+): Promise<{ failed: number; total: number }> {
   const cells = cellsInBounds(sw, ne);
+  let failed = 0;
   await runPool(cells, 6, async ([la, ln]) => {
     try {
       const stops = await stopsInCell(la, ln);
       if (stops.length) onCell(stops);
     } catch (e) {
+      failed++;
       console.error("[gyeonggi] 셀 조회 실패:", e);
     }
   });
+  return { failed, total: cells.length };
 }
 
 // 정류소 실시간 도착 — getBusArrivalListv2 응답에 routeName 이 포함돼 그대로 사용.

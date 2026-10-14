@@ -21,10 +21,10 @@ export async function streamStopsInBounds(
   sw: { lat: number; lng: number },
   ne: { lat: number; lng: number },
   onCell: (stops: Stop[]) => void,
-): Promise<void> {
+): Promise<{ failed: number; total: number }> {
   if (USE_MOCK) {
     onCell(MOCK_STOPS);
-    return;
+    return { failed: 0, total: 1 };
   }
   return streamGyeonggiStopsInBounds(sw, ne, onCell);
 }

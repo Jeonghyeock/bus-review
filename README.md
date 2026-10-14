@@ -44,6 +44,8 @@ cp .env.example .env.local   # 키 입력 (비워두면 BUS_USE_MOCK=true 로 �
 npm run dev                  # http://localhost:3000
 ```
 
+Supabase 키를 넣어 리뷰·즐겨찾기까지 쓰려면, 그 프로젝트에 아래 [배포](#배포-vercel) 1단계의 마이그레이션을 먼저 실행합니다.
+
 ### 환경변수 (`.env.local`)
 
 | 키 | 설명 |
@@ -55,7 +57,9 @@ npm run dev                  # http://localhost:3000
 
 ## 배포 (Vercel)
 
-1. Supabase SQL Editor에서 `supabase/migrations/`의 `0001`~`0004`를 번호 순서대로 실행 (`0004`를 빠뜨리면 정류장×노선 리뷰가 저장되지 않음)
+1. Supabase SQL Editor에서 `supabase/migrations/`의 파일을 **번호 순서대로 모두** 실행
+   - 이미 일부를 적용한 DB라면 아직 적용하지 않은 번호부터 실행 (앞 번호를 다시 실행하면 "policy already exists" 오류로 멈춤)
+   - 예: `0004`가 빠지면 도착 버스를 펼쳤을 때 나오는 '이 노선 리뷰'가 저장되지 않음
 2. Vercel에 위 환경변수 등록 (실데이터를 쓰려면 `BUS_USE_MOCK=false`)
 3. 네이버 콘솔에 배포 도메인 등록, Supabase Auth의 Redirect URL에 배포 도메인 추가
 

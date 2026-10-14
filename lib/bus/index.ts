@@ -1,4 +1,5 @@
-// 버스 데이터 진입점. region 을 보고 provider 어댑터(seoul/gyeonggi)를 선택한다.
+// 버스 데이터 진입점. 지금은 경기(GBIS) 어댑터만 부른다.
+// 서울을 붙일 때는 region 을 받아 어댑터를 고르도록 바꾸고, API 라우트·쿼리 훅도 region 을 넘기게 한다.
 // 실 API 준비 전에는 BUS_USE_MOCK=true 로 목업 반환.
 
 import {

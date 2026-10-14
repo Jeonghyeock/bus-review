@@ -16,6 +16,11 @@ export async function GET(req: NextRequest) {
     return new Response("", { headers: { "content-type": "application/x-ndjson" } });
   }
 
+  // 클라이언트가 끊으면(지도를 옮겨 이전 요청 취소) 남은 셀 조회와 진행 중인 공공 API 요청을 멈춘다.
+  // 끊김은 응답 스트림 취소(cancel)나 요청의 signal 로 전해지므로 둘 다 받는다.
+  const abort = new AbortController();
+  req.signal?.addEventListener("abort", () => abort.abort(), { once: true });
+
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -28,12 +33,17 @@ export async function GET(req: NextRequest) {
         }
       };
       try {
-        const { failed, total } = await streamStopsInBounds(
+        const { failed, total, queried } = await streamStopsInBounds(
           { lat: swLat, lng: swLng },
           { lat: neLat, lng: neLng },
           (stops) => send(stops),
+          abort.signal,
         );
-        if (failed > 0) send({ failed, total });
+        if (abort.signal.aborted) {
+          console.info(`[api] stops/in-view 클라이언트가 끊어 중단 (셀 ${queried}/${total} 조회)`);
+        } else if (failed > 0) {
+          send({ failed, total });
+        }
       } catch (e) {
         console.error("[api] stops/in-view 실패:", e);
         send({ failed: 1, total: 1 });
@@ -44,6 +54,9 @@ export async function GET(req: NextRequest) {
           /* 이미 끊긴 스트림 */
         }
       }
+    },
+    cancel() {
+      abort.abort();
     },
   });
 

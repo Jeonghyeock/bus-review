@@ -18,12 +18,20 @@ export function useStopsInView(bounds: Bounds | null, enabled = true) {
 
   useEffect(() => {
     if (!enabled || !bounds) return;
+    const b = bounds;
     const ctrl = new AbortController();
     const acc = new Map<string, Stop>();
     let cancelled = false;
 
-    (async () => {
-      const b = bounds;
+    // 영역이 짧은 시간에 연달아 바뀌면(첫 화면 알림 직후 현재 위치로 이동 등) 마지막 영역만 요청한다.
+    // 서버는 요청이 취소돼도 공공 API 조회를 끝까지 돌리므로, 곧 버릴 요청은 아예 보내지 않는다.
+    const timer = setTimeout(() => {
+      load().catch((e) => {
+        if ((e as Error).name !== "AbortError") console.error(e);
+      });
+    }, 150);
+
+    async function load() {
       const res = await fetch(
         `/api/stops/in-view?swLat=${b.swLat}&swLng=${b.swLng}&neLat=${b.neLat}&neLng=${b.neLng}`,
         { signal: ctrl.signal },
@@ -53,12 +61,11 @@ export function useStopsInView(bounds: Bounds | null, enabled = true) {
       }
       // 스트림 종료 시 최종 반영 (빈 영역이면 [] 로 이전 마커 정리)
       if (!cancelled) setData([...acc.values()]);
-    })().catch((e) => {
-      if ((e as Error).name !== "AbortError") console.error(e);
-    });
+    }
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

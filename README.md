@@ -55,7 +55,7 @@ npm run dev                  # http://localhost:3000
 
 ## 배포 (Vercel)
 
-1. Supabase SQL Editor에서 `supabase/migrations/`의 `0001`·`0002`·`0003` 실행
+1. Supabase SQL Editor에서 `supabase/migrations/`의 `0001`~`0004`를 번호 순서대로 실행 (`0004`를 빠뜨리면 정류장×노선 리뷰가 저장되지 않음)
 2. Vercel에 위 환경변수 등록 (실데이터를 쓰려면 `BUS_USE_MOCK=false`)
 3. 네이버 콘솔에 배포 도메인 등록, Supabase Auth의 Redirect URL에 배포 도메인 추가
 

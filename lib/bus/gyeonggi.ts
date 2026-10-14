@@ -35,12 +35,14 @@ function parseResp(text: string): any {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function callGbis(path: string, params: Record<string, string>, signal?: AbortSignal): Promise<any> {
+async function callGbis(path: string, params: Record<string, string>): Promise<any> {
   const qs = new URLSearchParams({ serviceKey: apiKey(), format: "json", ...params });
   // 429(rate limit)는 짧게 backoff 후 최대 2회 재시도
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(`${BASE}${path}?${qs}`, { cache: "no-store", signal });
+    const res = await fetch(`${BASE}${path}?${qs}`, { cache: "no-store" });
     if (res.ok) return parseResp(await res.text());
+    // 읽지 않은 본문은 버려야 연결이 바로 풀린다
+    await res.body?.cancel();
     if (res.status === 429 && attempt < 2) {
       await sleep(300 * (attempt + 1));
       continue;
@@ -75,15 +77,14 @@ const CELL = 0.006; // 격자 셀 크기(도) ~ 500m
 const CELL_CACHE_MAX = 1000; // 캐시 상한 (초과 시 가장 오래된 항목부터 제거)
 const cellCache = new Map<string, Stop[]>();
 
-async function stopsInCell(cellLat: number, cellLng: number, signal?: AbortSignal): Promise<Stop[]> {
+async function stopsInCell(cellLat: number, cellLng: number): Promise<Stop[]> {
   const key = `${cellLat.toFixed(3)},${cellLng.toFixed(3)}`;
   const cached = cellCache.get(key);
   if (cached) return cached;
-  const data = await callGbis(
-    "/busstationservice/v2/getBusStationAroundListv2",
-    { x: String(cellLng), y: String(cellLat) },
-    signal,
-  );
+  const data = await callGbis("/busstationservice/v2/getBusStationAroundListv2", {
+    x: String(cellLng),
+    y: String(cellLat),
+  });
   const stops = toArray<any>(data?.response?.msgBody?.busStationAroundList)
     .map(mapStation)
     .filter(validStop);
@@ -95,28 +96,26 @@ async function stopsInCell(cellLat: number, cellLng: number, signal?: AbortSigna
   return stops;
 }
 
-// 동시 실행 수를 제한하는 풀 — GBIS rate limit(429) 회피. 실패해도 나머지는 반영.
-// signal 이 취소되면 남은 항목은 꺼내지 않는다.
-async function runPool<T, R>(
+// 동시 실행 수를 제한하는 풀 — GBIS rate limit(429) 회피. 항목 하나가 실패해도 나머지는 계속한다.
+// signal 이 취소되면 남은 항목은 꺼내지 않는다(이미 시작한 항목은 끝까지 간다).
+async function runPool<T>(
   items: T[],
   limit: number,
-  fn: (item: T) => Promise<R>,
+  fn: (item: T) => Promise<void>,
   signal?: AbortSignal,
-): Promise<PromiseSettledResult<R>[]> {
-  const results = new Array<PromiseSettledResult<R>>(items.length);
+): Promise<void> {
   let next = 0;
   const worker = async () => {
     while (next < items.length && !signal?.aborted) {
       const i = next++;
       try {
-        results[i] = { status: "fulfilled", value: await fn(items[i]) };
-      } catch (reason) {
-        results[i] = { status: "rejected", reason };
+        await fn(items[i]);
+      } catch {
+        /* 항목별 오류는 fn 이 처리한다 */
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }
 
 // bounds 를 500m 셀 격자로 나누고 "화면 중심에서 가까운 순"으로 정렬 (가운데부터 조회)
@@ -145,33 +144,33 @@ function cellsInBounds(
 
 // 중심 셀부터 조회하고, 완료되는 셀마다 onCell 로 흘려보낸다 (동시 6개, 429 회피).
 // 실패한 셀은 건너뛰고 나머지를 계속 보내며, 몇 칸이 실패했는지 돌려준다('정류소 없음'과 '조회 실패'를 구분하려고).
-// signal 이 취소되면(클라이언트가 끊음) 남은 셀을 조회하지 않고, 진행 중인 공공 API 요청도 끊는다.
+// signal 이 취소되면(클라이언트가 끊음) 남은 셀은 조회하지 않는다. 이미 시작한 셀은 끝까지 받아 캐시에 남긴다 —
+// 공공 API 는 요청을 받는 순간 호출로 세므로 중간에 끊어도 한도가 아껴지지 않고, 겹치는 다음 영역에서 다시 쓸 수 있다.
 export async function streamGyeonggiStopsInBounds(
   sw: { lat: number; lng: number },
   ne: { lat: number; lng: number },
   onCell: (stops: Stop[]) => void,
   signal?: AbortSignal,
-): Promise<{ failed: number; total: number; queried: number }> {
+): Promise<{ failed: number; total: number; started: number }> {
   const cells = cellsInBounds(sw, ne);
   let failed = 0;
-  let queried = 0;
+  let started = 0;
   await runPool(
     cells,
     6,
     async ([la, ln]) => {
-      queried++;
+      started++;
       try {
-        const stops = await stopsInCell(la, ln, signal);
+        const stops = await stopsInCell(la, ln);
         if (stops.length) onCell(stops);
       } catch (e) {
-        if (signal?.aborted) return; // 끊어서 생긴 오류는 실패로 세지 않는다
         failed++;
         console.error("[gyeonggi] 셀 조회 실패:", e);
       }
     },
     signal,
   );
-  return { failed, total: cells.length, queried };
+  return { failed, total: cells.length, started };
 }
 
 // 정류소 실시간 도착 — getBusArrivalListv2 응답에 routeName 이 포함돼 그대로 사용.

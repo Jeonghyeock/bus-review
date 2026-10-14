@@ -17,22 +17,21 @@ const WIDE = "http://localhost/api/stops/in-view?swLat=37.2400&swLng=126.9800&ne
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// 응답에 50ms 걸리는 공공 API. 끊으면 진행 중인 요청이 실제 fetch 처럼 AbortError 로 끝난다.
+// 응답에 50ms 걸리는 공공 API (부른 횟수를 센다)
 function slowGbis() {
-  const state = { calls: 0, aborted: 0 };
+  const state = { calls: 0 };
   const impl = vi.fn(
-    (_url: string, init?: RequestInit) =>
-      new Promise<Response>((resolve, reject) => {
+    () =>
+      new Promise<Response>((resolve) => {
         const n = state.calls++;
-        const timer = setTimeout(() => resolve(station(`s${n}`)), 50);
-        init?.signal?.addEventListener("abort", () => {
-          clearTimeout(timer);
-          state.aborted++;
-          reject(new DOMException("aborted", "AbortError"));
-        });
+        setTimeout(() => resolve(station(`s${n}`)), 50);
       }),
   );
   return Object.assign(state, { impl });
+}
+
+async function readAll(res: Response) {
+  return (await res.text()).split("\n").filter(Boolean);
 }
 
 async function loadRoute(fetchImpl: (...args: never[]) => Promise<Response>, mock = false) {
@@ -84,7 +83,7 @@ describe("GET /api/stops/in-view", () => {
     expect(summaryLines(lines)).toEqual([]);
   });
 
-  it("클라이언트가 응답 스트림을 끊으면 남은 셀을 조회하지 않고 진행 중인 공공 API 요청도 끊는다", async () => {
+  it("클라이언트가 응답 스트림을 끊으면 남은 셀은 조회하지 않는다", async () => {
     const gbis = slowGbis();
     const GET = await loadRoute(gbis.impl);
     const reader = (await GET(new Request(WIDE) as never)).body!.getReader();
@@ -92,7 +91,30 @@ describe("GET /api/stops/in-view", () => {
     await reader.cancel(); // 지도를 옮겨 이전 요청을 취소한 것처럼 끊는다
     await sleep(400); // 멈추지 않았다면 24칸을 다 부를 시간
     expect(gbis.calls).toBeLessThanOrEqual(12); // 처음 동시에 시작한 6칸 + 첫 응답 무렵 이어서 시작한 몇 칸
-    expect(gbis.aborted).toBeGreaterThan(0);
+  });
+
+  it("끊긴 요청에서 이미 시작한 셀은 끝까지 받아 캐시에 남기므로, 같은 영역을 다시 열면 칸마다 한 번씩만 부른다", async () => {
+    const gbis = slowGbis();
+    const GET = await loadRoute(gbis.impl);
+    const reader = (await GET(new Request(WIDE) as never)).body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await sleep(400); // 진행 중이던 셀이 끝나 캐시에 들어갈 시간
+    const first = gbis.calls;
+
+    const lines = await readAll(await GET(new Request(WIDE) as never)); // 같은 영역을 다시 끝까지
+    expect(lines).toHaveLength(24); // 24칸 모두 결과가 옴(캐시 + 새 조회)
+    expect(gbis.calls).toBe(24); // 첫 요청에서 부른 칸은 다시 부르지 않음
+    expect(first).toBeLessThan(24);
+  });
+
+  it("이미 취소된 채 들어온 요청은 공공 API 를 부르지 않는다", async () => {
+    const gbis = slowGbis();
+    const GET = await loadRoute(gbis.impl);
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await readAll(await GET(new Request(WIDE, { signal: ctrl.signal }) as never));
+    expect(gbis.calls).toBe(0);
   });
 
   it("요청의 signal 이 취소돼도 남은 셀 조회를 멈춘다", async () => {
@@ -106,7 +128,7 @@ describe("GET /api/stops/in-view", () => {
     expect(gbis.calls).toBeLessThanOrEqual(12);
   });
 
-  it("끊어서 생긴 오류는 실패한 셀로 세지 않는다", async () => {
+  it("취소되면 시작한 셀까지만 처리하고, 실패한 셀로 세지 않는다", async () => {
     const gbis = slowGbis();
     await loadRoute(gbis.impl);
     const { streamGyeonggiStopsInBounds } = await import("@/lib/bus/gyeonggi");
@@ -119,7 +141,7 @@ describe("GET /api/stops/in-view", () => {
       ctrl.signal,
     );
     expect(result.failed).toBe(0);
-    expect(result.queried).toBeLessThan(result.total);
+    expect(result.started).toBeLessThan(result.total);
   });
 
   it("목업 모드에서는 공공 API 를 부르지 않고 요약 줄도 없다", async () => {

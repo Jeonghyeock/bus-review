@@ -16,10 +16,10 @@ export async function GET(req: NextRequest) {
     return new Response("", { headers: { "content-type": "application/x-ndjson" } });
   }
 
-  // 클라이언트가 끊으면(지도를 옮겨 이전 요청 취소) 남은 셀 조회와 진행 중인 공공 API 요청을 멈춘다.
-  // 끊김은 응답 스트림 취소(cancel)나 요청의 signal 로 전해지므로 둘 다 받는다.
-  const abort = new AbortController();
-  req.signal?.addEventListener("abort", () => abort.abort(), { once: true });
+  // 클라이언트가 끊으면(지도를 옮겨 이전 요청 취소) 남은 셀은 조회하지 않는다.
+  // 끊김은 응답 스트림 취소(cancel)나 요청의 signal 로 전해지므로 둘을 합친다. 요청이 이미 취소된 채 들어와도 바로 멈춘다.
+  const streamCancelled = new AbortController();
+  const signal = AbortSignal.any([req.signal, streamCancelled.signal]);
 
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -33,14 +33,14 @@ export async function GET(req: NextRequest) {
         }
       };
       try {
-        const { failed, total, queried } = await streamStopsInBounds(
+        const { failed, total, started } = await streamStopsInBounds(
           { lat: swLat, lng: swLng },
           { lat: neLat, lng: neLng },
           (stops) => send(stops),
-          abort.signal,
+          signal,
         );
-        if (abort.signal.aborted) {
-          console.info(`[api] stops/in-view 클라이언트가 끊어 중단 (셀 ${queried}/${total} 조회)`);
+        if (signal.aborted) {
+          console.info(`[api] stops/in-view 클라이언트가 끊어 남은 셀 건너뜀 (셀 ${started}/${total}까지 시작)`);
         } else if (failed > 0) {
           send({ failed, total });
         }
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       }
     },
     cancel() {
-      abort.abort();
+      streamCancelled.abort();
     },
   });
 

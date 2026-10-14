@@ -22,10 +22,10 @@ export async function streamStopsInBounds(
   ne: { lat: number; lng: number },
   onCell: (stops: Stop[]) => void,
   signal?: AbortSignal,
-): Promise<{ failed: number; total: number; queried: number }> {
+): Promise<{ failed: number; total: number; started: number }> {
   if (USE_MOCK) {
     onCell(MOCK_STOPS);
-    return { failed: 0, total: 1, queried: 1 };
+    return { failed: 0, total: 1, started: 1 };
   }
   return streamGyeonggiStopsInBounds(sw, ne, onCell, signal);
 }

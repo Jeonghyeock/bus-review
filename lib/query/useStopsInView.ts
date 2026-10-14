@@ -41,7 +41,7 @@ export function useStopsInView(bounds: Bounds | null, enabled = true) {
     setError(false);
 
     // 영역이 짧은 시간에 연달아 바뀌면(첫 화면 알림 직후 현재 위치로 이동 등) 마지막 영역만 요청한다.
-    // 서버는 요청이 취소돼도 공공 API 조회를 끝까지 돌리므로, 곧 버릴 요청은 아예 보내지 않는다.
+    // 서버는 끊긴 요청의 남은 셀은 건너뛰지만 이미 시작한 셀은 끝까지 부르므로, 곧 버릴 요청은 아예 보내지 않는 편이 낫다.
     const timer = setTimeout(() => {
       load().catch((e) => {
         if (cancelled) return; // 다른 영역으로 바뀌어 취소된 요청

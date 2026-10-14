@@ -7,8 +7,13 @@ import type { Stop } from "@/lib/bus/types";
 export type Bounds = { swLat: number; swLng: number; neLat: number; neLng: number };
 
 // 지도 영역 내 정류소를 NDJSON 스트림으로 받아, 중심 셀부터 도착하는 대로 누적 표시.
+// initialLoading: 첫 결과(첫 조각 또는 빈 응답)가 오기 전까지 true — 처음 들어왔을 때만 로딩을 보여 주는 데 쓴다.
+//                 이후 지도를 옮길 때는 이전 정류소를 그대로 둔 채 새 결과로 바꾸므로 로딩 상태가 없다.
+// error: 가장 최근 요청이 실패했는지
 export function useStopsInView(bounds: Bounds | null, enabled = true) {
   const [data, setData] = useState<Stop[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   // 미세 이동 시 재조회를 줄이기 위해 소수 3자리로 반올림한 키
   const key =
@@ -27,7 +32,10 @@ export function useStopsInView(bounds: Bounds | null, enabled = true) {
     // 서버는 요청이 취소돼도 공공 API 조회를 끝까지 돌리므로, 곧 버릴 요청은 아예 보내지 않는다.
     const timer = setTimeout(() => {
       load().catch((e) => {
-        if ((e as Error).name !== "AbortError") console.error(e);
+        if ((e as Error).name === "AbortError" || cancelled) return;
+        console.error(e);
+        setError(true);
+        setInitialLoading(false);
       });
     }, 150);
 
@@ -57,10 +65,17 @@ export function useStopsInView(bounds: Bounds | null, enabled = true) {
             /* 불완전 라인 무시 */
           }
         }
-        if (changed && !cancelled) setData([...acc.values()]);
+        if (changed && !cancelled) {
+          setData([...acc.values()]);
+          setInitialLoading(false);
+        }
       }
       // 스트림 종료 시 최종 반영 (빈 영역이면 [] 로 이전 마커 정리)
-      if (!cancelled) setData([...acc.values()]);
+      if (!cancelled) {
+        setData([...acc.values()]);
+        setInitialLoading(false);
+        setError(false);
+      }
     }
 
     return () => {
@@ -71,5 +86,5 @@ export function useStopsInView(bounds: Bounds | null, enabled = true) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, enabled]);
 
-  return { data };
+  return { data, initialLoading, error };
 }

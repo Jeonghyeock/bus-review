@@ -47,10 +47,17 @@ export default function Home() {
   }, [selectedRoute, setSelectedBusId]);
 
   const canLoad = zoom >= MIN_ZOOM;
-  const { data, initialLoading, error: stopsError } = useStopsInView(bounds, canLoad);
+  const {
+    data,
+    pending: stopsPending,
+    initialLoading,
+    error: stopsError,
+    retry: retryStops,
+  } = useStopsInView(bounds, canLoad);
   const stops = canLoad ? data : [];
   // 처음 들어왔을 때만 로딩을 보여 준다. 지도를 옮길 때는 이전 정류소를 둔 채 바뀌므로 띄우지 않는다.
-  const showInitialLoading = canLoad && initialLoading;
+  // 지도가 준비된 뒤에만 띄운다 — 지도 SDK 로드에 실패하면 요청 자체가 없어 로딩이 끝나지 않기 때문이다.
+  const showInitialLoading = canLoad && initialLoading && !!map;
 
   const handleIdle = (v: { lat: number; lng: number; zoom: number; bounds: Bounds }) => {
     setZoom(v.zoom);
@@ -198,15 +205,22 @@ export default function Home() {
           ))}
           {showInitialLoading && (
             <li className="flex items-center justify-center gap-2 rounded-xl bg-gray-50 py-6 text-sm text-gray-400">
-              <LoaderCircle size={16} className="animate-spin" aria-hidden />
+              <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden />
               주변 정류소를 불러오는 중…
             </li>
           )}
-          {!showInitialLoading && stops?.length === 0 && (
+          {/* 요청이 끝난 뒤에만 결과 안내 — 진행 중에 '없어요'가 먼저 보이지 않게 한다 */}
+          {!showInitialLoading && !stopsPending && stopsError && (
+            <li className="flex items-center justify-center gap-2 rounded-xl bg-red-50 py-5 text-sm text-red-500">
+              정류소를 불러오지 못했어요.
+              <button className="font-medium underline underline-offset-2" onClick={retryStops}>
+                다시 시도
+              </button>
+            </li>
+          )}
+          {!showInitialLoading && !stopsPending && !stopsError && stops?.length === 0 && (
             <li className="rounded-xl bg-gray-50 py-6 text-center text-sm text-gray-400">
-              {stopsError
-                ? "정류소를 불러오지 못했어요. 지도를 옮기면 다시 불러와요."
-                : "이 근처엔 정류소가 없어요. 지도를 옮겨보세요."}
+              이 근처엔 정류소가 없어요. 지도를 옮겨보세요.
             </li>
           )}
         </ul>
@@ -249,12 +263,17 @@ export default function Home() {
         {!!map && selectedRoute && <RoutePolyline map={map} routeId={selectedRoute.id} />}
         {!!map && selectedRoute && <BusMarkers map={map} routeId={selectedRoute.id} />}
         {!!map && myLocation && <MyLocationMarker map={map} position={myLocation} />}
-        {showInitialLoading && (
+        {/* 스크린리더용 상태 알림 — 항상 두어야 내용이 바뀔 때 읽어 준다 */}
+        <p role="status" className="sr-only">
+          {showInitialLoading ? "주변 정류소를 불러오는 중" : ""}
+        </p>
+        {/* 모바일은 바텀시트가 접혀 있을 수 있어 지도 위에도 표시한다. 데스크톱은 사이드바 목록에 보인다. */}
+        {showInitialLoading && !isDesktop && (
           <div
-            role="status"
-            className={`pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-md ${isDesktop ? "top-3" : "top-[72px]"}`}
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-[72px] z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-600 shadow-md"
           >
-            <LoaderCircle size={14} className="animate-spin text-blue-600" aria-hidden />
+            <LoaderCircle size={14} className="text-blue-600 motion-safe:animate-spin" />
             정류소 불러오는 중
           </div>
         )}

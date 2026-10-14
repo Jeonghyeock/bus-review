@@ -83,6 +83,7 @@ favorites (user_id uuid, target_type text, target_id text, region text, name tex
 - `reviews` SELECT: 누구나
 - `reviews` INSERT/UPDATE/DELETE: `auth.uid() = user_id` 인 본인만
 - `bus_targets`: 클라이언트(anon·authenticated) 접근 없음 (쓰지 않는 테이블)
+- `profiles` SELECT: 리뷰를 쓴 사람과 본인만, 열은 id·nickname·avatar_url 만 (0007)
 - 평균 평점: `reviews`에서 집계(뷰 또는 쿼리 `avg(rating), count(*)`)
 
 ---

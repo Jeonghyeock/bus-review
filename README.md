@@ -46,6 +46,8 @@ npm run dev                  # http://localhost:3000
 
 Supabase 키를 넣어 리뷰·즐겨찾기까지 쓰려면, 그 프로젝트에 아래 [배포](#배포-vercel) 1단계의 마이그레이션을 먼저 실행합니다.
 
+테스트(`npm test`)는 Node 22.12 이상이 필요합니다(vitest 5 요구 사항). 앱 실행과 빌드는 Node 20에서도 됩니다.
+
 ### 환경변수 (`.env.local`)
 
 | 키 | 설명 |

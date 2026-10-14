@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 // Supabase 가 미리 만들어 두는 것(anon·authenticated 역할, auth 스키마, 기본 권한)만 최소한으로 흉내 낸다.
 // PostgREST 는 거치지 않으므로, 클라이언트가 보내는 것과 같은 쿼리를 같은 역할로 직접 실행해 확인한다.
 
-const MIGRATIONS_DIR = path.resolve(__dirname, "../supabase/migrations");
+const MIGRATIONS_DIR = path.resolve(import.meta.dirname, "../supabase/migrations");
 const MIGRATIONS = readdirSync(MIGRATIONS_DIR)
   .filter((file) => file.endsWith(".sql"))
   .sort();

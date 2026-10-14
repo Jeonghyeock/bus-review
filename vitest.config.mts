@@ -1,7 +1,7 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  resolve: { alias: { "@": fileURLToPath(new URL(".", import.meta.url)) } },
+  // tsconfig.json 의 paths("@/*")를 그대로 쓴다
+  resolve: { tsconfigPaths: true },
   test: { environment: "node" },
 });

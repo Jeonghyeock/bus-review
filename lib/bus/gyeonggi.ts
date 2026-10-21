@@ -35,12 +35,27 @@ function parseResp(text: string): any {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// GBIS 는 오류도 HTTP 200 으로 보내고 msgHeader.resultCode 로 알린다. 오류를 '결과 없음'으로 넘기면 빈 결과가 캐시에 남으므로 던진다.
+// 결과로 보는 코드: 0 정상, 4 결과 없음(실제 호출로 확인, msgBody 없음), 23 버스 도착 정보 없음(GBIS 활용 가이드).
+// 그 밖의 코드(1 시스템 에러, 2·3 파라미터, 5~7 인증키, 8 요청 제한 초과, 99 준비중 등)는 오류.
+function checkGbisResult(path: string, data: any): any {
+  // 인증키 오류 등은 공공데이터포털 게이트웨이가 response 대신 OpenAPI_ServiceResponse 로 답한다
+  if (data?.OpenAPI_ServiceResponse) {
+    throw new Error(`GBIS ${path} 실패: ${JSON.stringify(data.OpenAPI_ServiceResponse)}`);
+  }
+  const header = data?.response?.msgHeader;
+  if (!header) throw new Error(`GBIS ${path} 실패: msgHeader 없음`);
+  const code = num(header.resultCode);
+  if (code === 0 || code === 4 || code === 23) return data;
+  throw new Error(`GBIS ${path} 실패: resultCode ${header.resultCode} (${header.resultMessage})`);
+}
+
 async function callGbis(path: string, params: Record<string, string>): Promise<any> {
   const qs = new URLSearchParams({ serviceKey: apiKey(), format: "json", ...params });
   // 429(rate limit)는 짧게 backoff 후 최대 2회 재시도
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`${BASE}${path}?${qs}`, { cache: "no-store" });
-    if (res.ok) return parseResp(await res.text());
+    if (res.ok) return checkGbisResult(path, parseResp(await res.text()));
     // 읽지 않은 본문은 버려야 연결이 바로 풀린다
     await res.body?.cancel();
     if (res.status === 429 && attempt < 2) {

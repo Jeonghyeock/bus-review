@@ -8,9 +8,16 @@ const URL_ = "http://localhost/api/stops/in-view?swLat=37.2600&swLng=127.0000&ne
 const station = (id: string) =>
   new Response(
     JSON.stringify({
-      response: { msgBody: { busStationAroundList: [{ stationId: id, stationName: "정류소", x: 127.001, y: 37.261, mobileNo: "01" }] } },
+      response: {
+        msgHeader: { resultCode: 0 },
+        msgBody: { busStationAroundList: [{ stationId: id, stationName: "정류소", x: 127.001, y: 37.261, mobileNo: "01" }] },
+      },
     }),
   );
+
+// GBIS 는 오류·결과 없음도 HTTP 200 으로 보내고 msgHeader.resultCode 로 알린다 (msgBody 없음)
+const gbisCode = (resultCode: number, resultMessage: string) =>
+  new Response(JSON.stringify({ response: { comMsgHeader: "", msgHeader: { resultCode, resultMessage } } }));
 
 // 셀 24칸(상한)이 나오는 넓은 영역 — 동시 실행 수(6)보다 칸이 많아야 취소 효과를 볼 수 있다
 const WIDE = "http://localhost/api/stops/in-view?swLat=37.2400&swLng=126.9800&neLat=37.2800&neLng=127.0300";
@@ -81,6 +88,50 @@ describe("GET /api/stops/in-view", () => {
     const { lines, calls } = await callRoute((n) => station(`s${n}`));
     expect(stopLines(lines)).toHaveLength(calls);
     expect(summaryLines(lines)).toEqual([]);
+  });
+
+  it("200 이어도 resultCode 가 오류(8 요청 제한 초과)면 실패한 셀로 세고, 캐시하지 않아 다시 열면 또 부른다", async () => {
+    let calls = 0;
+    const GET = await loadRoute(
+      vi.fn(async () => {
+        calls++;
+        return gbisCode(8, "요청 제한 초과");
+      }),
+    );
+    const lines = (await readAll(await GET(new Request(URL_) as never))).map((l) => JSON.parse(l) as unknown);
+    const first = calls;
+    expect(first).toBeGreaterThan(1);
+    expect(lines).toEqual([{ failed: first, total: first }]);
+
+    await readAll(await GET(new Request(URL_) as never)); // 같은 영역을 다시 열면
+    expect(calls).toBe(first * 2); // 칸마다 다시 부른다
+  });
+
+  it("resultCode 4(결과 없음)는 실패가 아니라 정류소 없음이고, 캐시해 다시 부르지 않는다", async () => {
+    let calls = 0;
+    const GET = await loadRoute(
+      vi.fn(async () => {
+        calls++;
+        return gbisCode(4, "결과가 존재하지 않습니다.");
+      }),
+    );
+    const lines = await readAll(await GET(new Request(URL_) as never));
+    const first = calls;
+    expect(first).toBeGreaterThan(1);
+    expect(lines).toEqual([]); // 정류소 줄도, 실패 요약 줄도 없음
+
+    await readAll(await GET(new Request(URL_) as never));
+    expect(calls).toBe(first);
+  });
+
+  it("200 이어도 공공데이터포털 게이트웨이 오류(OpenAPI_ServiceResponse)면 실패한 셀로 센다", async () => {
+    const gateway =
+      "<OpenAPI_ServiceResponse><cmmMsgHeader><errMsg>SERVICE ERROR</errMsg>" +
+      "<returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg><returnReasonCode>30</returnReasonCode>" +
+      "</cmmMsgHeader></OpenAPI_ServiceResponse>";
+    const { lines, calls } = await callRoute(() => new Response(gateway));
+    expect(stopLines(lines)).toEqual([]);
+    expect(summaryLines(lines)).toEqual([{ failed: calls, total: calls }]);
   });
 
   it("클라이언트가 응답 스트림을 끊으면 남은 셀은 조회하지 않는다", async () => {

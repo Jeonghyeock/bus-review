@@ -267,10 +267,19 @@ export async function getGyeonggiRoutePath(routeId: string): Promise<LatLng[]> {
 }
 
 // 노선의 실시간 버스 위치. 위치 API 는 stationId 만 주므로 좌표로 변환(캐시).
+// 처음 열면 캐시가 비어 버스마다 정류소 조회가 나가므로, 셀 조회처럼 동시 6개로 제한한다(429 로 버스가 빠지지 않게).
 export async function getGyeonggiBusPositions(routeId: string): Promise<BusPosition[]> {
   const data = await callGbis("/buslocationservice/v2/getBusLocationListv2", { routeId });
   const buses = toArray<any>(data?.response?.msgBody?.busLocationList);
-  const coords = await Promise.all(buses.map((b) => stationCoord(String(b.stationId))));
+  // 결과는 버스 순서대로 같은 자리에 넣는다
+  const coords: Array<{ lat: number; lng: number } | null> = [];
+  await runPool(
+    buses.map((_, i) => i),
+    6,
+    async (i) => {
+      coords[i] = await stationCoord(String(buses[i].stationId));
+    },
+  );
 
   const result: BusPosition[] = [];
   buses.forEach((b, i) => {

@@ -17,9 +17,14 @@ export async function GET(req: NextRequest) {
   }
 
   // 클라이언트가 끊으면(지도를 옮겨 이전 요청 취소) 남은 셀은 조회하지 않는다.
-  // 끊김은 응답 스트림 취소(cancel)나 요청의 signal 로 전해지므로 둘을 합친다. 요청이 이미 취소된 채 들어와도 바로 멈춘다.
-  const streamCancelled = new AbortController();
-  const signal = AbortSignal.any([req.signal, streamCancelled.signal]);
+  // 끊김은 응답 스트림 취소(cancel)나 요청의 signal 로 전해지므로 둘을 컨트롤러 하나로 모은다. 요청이 이미 취소된 채 들어와도 바로 멈춘다.
+  // AbortSignal.any 는 원래 signal 을 약하게 잡아, 요청 객체가 GC 되면 끊김이 전해지지 않는다(CI 에서 재현).
+  // 그래서 요청 signal 에 직접 리스너를 걸고 스트림이 끝날 때 뗀다. 그동안 req 를 붙잡아 둔다.
+  const cancelled = new AbortController();
+  const onRequestAbort = () => cancelled.abort();
+  if (req.signal.aborted) cancelled.abort();
+  else req.signal.addEventListener("abort", onRequestAbort, { once: true });
+  const signal = cancelled.signal;
 
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -48,6 +53,7 @@ export async function GET(req: NextRequest) {
         console.error("[api] stops/in-view 실패:", e);
         send({ failed: 1, total: 1 });
       } finally {
+        req.signal.removeEventListener("abort", onRequestAbort);
         try {
           controller.close();
         } catch {
@@ -56,7 +62,7 @@ export async function GET(req: NextRequest) {
       }
     },
     cancel() {
-      streamCancelled.abort();
+      cancelled.abort();
     },
   });
 

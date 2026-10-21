@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ stops: await searchStops(q) });
   } catch (e) {
     console.error("[api] stops/search 실패:", e);
-    return NextResponse.json({ stops: [] });
+    // 200 + 빈 배열이면 클라이언트가 '결과 없음'과 구분하지 못하므로 502 로 알린다
+    return NextResponse.json({ error: "정류소 검색 실패" }, { status: 502 });
   }
 }

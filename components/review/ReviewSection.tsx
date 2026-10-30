@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Region, ReviewTargetType } from "@/lib/bus/types";
 import { MAX_REVIEW_LENGTH, useAddReview, useReviews } from "@/lib/query/useReviews";
@@ -29,6 +29,17 @@ export default function ReviewSection({
   const [magicSent, setMagicSent] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
+  // 리뷰는 대상마다 한 사람에 하나라, 이미 쓴 리뷰가 있으면 폼에 불러와 그 리뷰를 고치게 한다.
+  // 불러오지 않으면 기본 별점 5 가 그대로 저장돼 원래 별점을 말없이 덮어쓴다.
+  const mine = user ? reviews?.find((r) => r.user_id === user.id) : undefined;
+  const [loadedMineId, setLoadedMineId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!mine || mine.id === loadedMineId) return;
+    setRating(mine.rating);
+    setContent(mine.content ?? "");
+    setLoadedMineId(mine.id);
+  }, [mine, loadedMineId]);
+
   if (!enabled) {
     return (
       <div className="mt-5 border-t border-gray-100 pt-4 text-xs text-gray-400">
@@ -41,15 +52,15 @@ export default function ReviewSection({
     reviews && reviews.length
       ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
       : null;
-  // 리뷰는 대상마다 한 사람에 하나라, 이미 쓴 리뷰가 있으면 다시 등록할 때 그 리뷰가 바뀐다
-  const hasMine = !!user && !!reviews?.some((r) => r.user_id === user.id);
+  const hasMine = !!mine;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
     addReview.mutate(
       { rating, content: content.trim(), tags: [] },
-      { onSuccess: () => setContent("") },
+      // 새로 쓴 리뷰는 비우고(목록이 다시 오면 위 effect 가 불러옴), 고친 리뷰는 고친 내용을 그대로 둔다
+      { onSuccess: () => !hasMine && setContent("") },
     );
   };
 
@@ -91,10 +102,10 @@ export default function ReviewSection({
             rows={2}
           />
           {hasMine && (
-            <p className="mt-1 text-xs text-gray-400">이미 남긴 리뷰가 있어요. 다시 등록하면 그 리뷰가 바뀝니다.</p>
+            <p className="mt-1 text-xs text-gray-400">이미 남긴 리뷰를 불러왔어요. 고쳐서 등록하면 그 리뷰가 바뀝니다.</p>
           )}
           <button
-            disabled={addReview.isPending}
+            disabled={addReview.isPending || isPending} // 목록을 받기 전에는 내 리뷰가 있는지 몰라 덮어쓰기 안내를 못 한다
             className="mt-2 w-full rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
             {addReview.isPending ? "등록 중…" : hasMine ? "내 리뷰 고치기" : "리뷰 등록"}

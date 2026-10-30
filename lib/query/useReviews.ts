@@ -33,6 +33,10 @@ export function useReviews(targetType: ReviewTargetType, targetId: string | null
   });
 }
 
+// 리뷰 본문 상한 — DB 의 reviews_content_length(0008)와 같은 값
+export const MAX_REVIEW_LENGTH = 1000;
+
+// 리뷰는 사람마다 대상마다 하나다(0008 의 reviews_user_target_key). 이미 있으면 그 리뷰를 고친다.
 export function useAddReview(targetType: ReviewTargetType, targetId: string, region: Region) {
   const qc = useQueryClient();
   return useMutation({
@@ -41,15 +45,18 @@ export function useAddReview(targetType: ReviewTargetType, targetId: string, reg
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData.user?.id;
       if (!uid) throw new Error("로그인이 필요합니다");
-      const { error } = await supabase.from("reviews").insert({
-        target_type: targetType,
-        target_id: targetId,
-        region,
-        rating: input.rating,
-        content: input.content,
-        tags: input.tags,
-        user_id: uid,
-      });
+      const { error } = await supabase.from("reviews").upsert(
+        {
+          target_type: targetType,
+          target_id: targetId,
+          region,
+          rating: input.rating,
+          content: input.content,
+          tags: input.tags,
+          user_id: uid,
+        },
+        { onConflict: "user_id,target_type,target_id" },
+      );
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews", targetType, targetId] }),

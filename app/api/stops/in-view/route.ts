@@ -8,11 +8,20 @@ import { streamStopsInBounds } from "@/lib/bus";
 // 공공 API 가 실패해도 응답은 200 이라, 이 줄이 없으면 클라이언트는 '정류소 없음'과 '조회 실패'를 구분할 수 없다.
 export async function GET(req: NextRequest) {
   const p = new URL(req.url).searchParams;
-  const swLat = Number(p.get("swLat"));
-  const swLng = Number(p.get("swLng"));
-  const neLat = Number(p.get("neLat"));
-  const neLng = Number(p.get("neLng"));
-  if ([swLat, swLng, neLat, neLng].some((n) => !Number.isFinite(n))) {
+  // Number(null)·Number("") 는 0 이라 빠진 좌표가 적도·본초 자오선으로 읽힌다. 네 값이 모두 있어야 하고,
+  // 위도·경도 범위 안이며 sw 가 ne 보다 작아야 한다 (지도는 이 형식으로만 보낸다).
+  const raw = ["swLat", "swLng", "neLat", "neLng"].map((k) => p.get(k)?.trim() ?? "");
+  const [swLat, swLng, neLat, neLng] = raw.map(Number);
+  const valid =
+    raw.every((v) => v !== "") &&
+    [swLat, swLng, neLat, neLng].every(Number.isFinite) &&
+    Math.abs(swLat) <= 90 &&
+    Math.abs(neLat) <= 90 &&
+    Math.abs(swLng) <= 180 &&
+    Math.abs(neLng) <= 180 &&
+    swLat <= neLat &&
+    swLng <= neLng;
+  if (!valid) {
     return new Response("", { headers: { "content-type": "application/x-ndjson" } });
   }
 

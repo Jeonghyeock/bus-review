@@ -201,4 +201,33 @@ describe("GET /api/stops/in-view", () => {
     expect(stopLines(lines)).toHaveLength(1);
     expect(summaryLines(lines)).toEqual([]);
   });
+
+  it("영역이 아주 넓어도(40°×40°) 중심 24칸만 만들어 바로 끝낸다", async () => {
+    // 고치기 전에는 격자 전체(약 4,400만 칸)를 배열로 만들고 정렬한 뒤에야 24칸으로 잘라, 힙이 넘쳐 프로세스가 죽었다
+    let calls = 0;
+    const GET = await loadRoute(vi.fn(async () => station(`s${calls++}`)));
+    const started = performance.now();
+    const lines = await readAll(
+      await GET(new Request("http://localhost/api/stops/in-view?swLat=0&swLng=100&neLat=40&neLng=140") as never),
+    );
+    expect(calls).toBe(24);
+    expect(lines).toHaveLength(24);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it.each([
+    ["좌표가 빠지면", "neLat=37.27&neLng=127.01"],
+    ["좌표가 비어 있으면", "swLat=&swLng=127.00&neLat=37.27&neLng=127.01"],
+    ["숫자가 아니면", "swLat=abc&swLng=127.00&neLat=37.27&neLng=127.01"],
+    ["sw 가 ne 보다 크면", "swLat=37.27&swLng=127.01&neLat=37.26&neLng=127.00"],
+    ["위도 범위를 넘으면", "swLat=-100&swLng=127.00&neLat=37.27&neLng=127.01"],
+  ])("%s 공공 API 를 부르지 않고 빈 응답을 보낸다", async (_, query) => {
+    // 빠진 값을 Number(null)=0 으로 읽으면 (0,0)~(37,127) 이 되어 격자가 1억 칸을 넘었다
+    let calls = 0;
+    const GET = await loadRoute(vi.fn(async () => station(`s${calls++}`)));
+    const res = await GET(new Request(`http://localhost/api/stops/in-view?${query}`) as never);
+    expect(res.status).toBe(200);
+    expect(await readAll(res)).toEqual([]);
+    expect(calls).toBe(0);
+  });
 });

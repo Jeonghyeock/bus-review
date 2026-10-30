@@ -6,8 +6,9 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 // 서버(RSC / Route Handler)에서 사용하는 Supabase 클라이언트.
 export async function createClient() {
   const cookieStore = await cookies();
+  // 빈 값("")은 없는 것으로 본다 (client.ts 와 같은 이유)
   const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     key,

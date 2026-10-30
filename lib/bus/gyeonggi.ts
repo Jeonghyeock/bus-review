@@ -221,25 +221,6 @@ export async function getGyeonggiArrivals(stationId: string): Promise<Arrival[]>
     });
 }
 
-// stationId → 좌표 캐시 (좌표는 불변이므로 프로세스 내 재사용)
-const stationCoordCache = new Map<string, { lat: number; lng: number } | null>();
-
-async function stationCoord(stationId: string): Promise<{ lat: number; lng: number } | null> {
-  const cached = stationCoordCache.get(stationId);
-  if (cached !== undefined) return cached;
-  try {
-    const data = await callGbis("/busstationservice/v2/busStationInfov2", { stationId });
-    const info = data?.response?.msgBody?.busStationInfo;
-    const lat = Number(info?.y);
-    const lng = Number(info?.x);
-    const coord = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
-    stationCoordCache.set(stationId, coord);
-    return coord;
-  } catch {
-    return null;
-  }
-}
-
 // 노선 경유 정류소 목록(순번순)
 export async function getGyeonggiRouteStations(routeId: string): Promise<RouteStation[]> {
   const data = await callGbis("/busrouteservice/v2/getBusRouteStationListv2", { routeId });
@@ -266,25 +247,54 @@ export async function getGyeonggiRoutePath(routeId: string): Promise<LatLng[]> {
     .map(({ lat, lng }) => ({ lat, lng }));
 }
 
-// 노선의 실시간 버스 위치. 위치 API 는 stationId 만 주므로 좌표로 변환(캐시).
-// 처음 열면 캐시가 비어 버스마다 정류소 조회가 나가므로, 셀 조회처럼 동시 6개로 제한한다(429 로 버스가 빠지지 않게).
-export async function getGyeonggiBusPositions(routeId: string): Promise<BusPosition[]> {
-  const data = await callGbis("/buslocationservice/v2/getBusLocationListv2", { routeId });
-  const buses = toArray<any>(data?.response?.msgBody?.busLocationList);
-  // 결과는 버스 순서대로 같은 자리에 넣는다
-  const coords: Array<{ lat: number; lng: number } | null> = [];
-  await runPool(
-    buses.map((_, i) => i),
-    6,
-    async (i) => {
-      coords[i] = await stationCoord(String(buses[i].stationId));
-    },
+// 노선 경유 정류소의 stationId → 좌표. 버스 위치 API 는 stationId 만 주므로, 버스마다 정류소를 따로 조회하지 않고
+// 노선 정류소 목록 한 번으로 좌표를 찾는다. 노선의 정류소는 거의 바뀌지 않아 하루 동안 캐시하고(노선 200개 상한),
+// 진행 중인 조회는 함께 기다리며, 실패는 캐시하지 않는다.
+const ROUTE_COORDS_TTL_MS = 24 * 60 * 60 * 1000;
+const ROUTE_COORDS_MAX = 200;
+const routeCoordsCache = new Map<string, { at: number; value: Promise<Map<string, LatLng>> }>();
+
+function routeStationCoords(routeId: string): Promise<Map<string, LatLng>> {
+  const now = Date.now();
+  const hit = routeCoordsCache.get(routeId);
+  if (hit && now - hit.at < ROUTE_COORDS_TTL_MS) return hit.value;
+
+  const value = getGyeonggiRouteStations(routeId).then(
+    (stations) =>
+      new Map(
+        stations
+          .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+          .map((s) => [s.id, { lat: s.lat, lng: s.lng }] as const),
+      ),
   );
+  routeCoordsCache.delete(routeId); // 다시 넣어 삽입 순서(오래된 순)의 맨 뒤로
+  routeCoordsCache.set(routeId, { at: now, value });
+  if (routeCoordsCache.size > ROUTE_COORDS_MAX) routeCoordsCache.delete(routeCoordsCache.keys().next().value!);
+  value.catch(() => {
+    if (routeCoordsCache.get(routeId)?.value === value) routeCoordsCache.delete(routeId);
+  });
+  return value;
+}
+
+// 노선의 실시간 버스 위치. 좌표는 노선 정류소 목록에서 찾는다(위 routeStationCoords).
+// 예전에는 버스마다 정류소 조회(busStationInfov2)를 보내, 그 조회가 실패하면 버스가 200 응답에서 조용히 빠지고
+// 모두 실패하면 지도에서 버스가 전부 사라졌다. 이제 조회는 버스 목록·노선 정류소 목록 두 번뿐이고,
+// 어느 쪽이든 실패하면 던져 라우트가 502 로 알린다(클라이언트는 지난 위치를 유지).
+export async function getGyeonggiBusPositions(routeId: string): Promise<BusPosition[]> {
+  const [data, coords] = await Promise.all([
+    callGbis("/buslocationservice/v2/getBusLocationListv2", { routeId }),
+    routeStationCoords(routeId),
+  ]);
+  const buses = toArray<any>(data?.response?.msgBody?.busLocationList);
 
   const result: BusPosition[] = [];
-  buses.forEach((b, i) => {
-    const c = coords[i];
-    if (!c) return;
+  let missing = 0;
+  buses.forEach((b) => {
+    const c = coords.get(String(b.stationId));
+    if (!c) {
+      missing++; // 노선 정류소 목록에 없는 정류소 (캐시한 뒤 노선이 바뀐 경우 등) — 다음 날 캐시가 갱신되면 풀린다
+      return;
+    }
     const seats = num(b.remainSeatCnt);
     result.push({
       id: String(b.vehId ?? b.plateNo),
@@ -297,5 +307,6 @@ export async function getGyeonggiBusPositions(routeId: string): Promise<BusPosit
       stationSeq: num(b.stationSeq),
     });
   });
+  if (missing > 0) console.warn(`[gyeonggi] 노선 ${routeId}: 정류소 목록에 없는 버스 위치 ${missing}건 건너뜀`);
   return result;
 }

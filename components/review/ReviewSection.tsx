@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import type { Region, ReviewTargetType } from "@/lib/bus/types";
-import { useAddReview, useReviews } from "@/lib/query/useReviews";
+import { MAX_REVIEW_LENGTH, useAddReview, useReviews } from "@/lib/query/useReviews";
 import { useUser } from "@/lib/supabase/useUser";
 
 import RatingStars from "./RatingStars";
@@ -41,6 +41,8 @@ export default function ReviewSection({
     reviews && reviews.length
       ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
       : null;
+  // 리뷰는 대상마다 한 사람에 하나라, 이미 쓴 리뷰가 있으면 다시 등록할 때 그 리뷰가 바뀐다
+  const hasMine = !!user && !!reviews?.some((r) => r.user_id === user.id);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,14 +86,18 @@ export default function ReviewSection({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="이 노선/정류장 어떤가요?"
+            maxLength={MAX_REVIEW_LENGTH}
             className="mt-2 w-full resize-none rounded-lg border border-gray-200 bg-white p-2.5 text-sm outline-none focus:border-blue-400"
             rows={2}
           />
+          {hasMine && (
+            <p className="mt-1 text-xs text-gray-400">이미 남긴 리뷰가 있어요. 다시 등록하면 그 리뷰가 바뀝니다.</p>
+          )}
           <button
             disabled={addReview.isPending}
             className="mt-2 w-full rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
-            {addReview.isPending ? "등록 중…" : "리뷰 등록"}
+            {addReview.isPending ? "등록 중…" : hasMine ? "내 리뷰 고치기" : "리뷰 등록"}
           </button>
           {addReview.isError && (
             <p className="mt-1 text-xs text-red-500">등록 실패: {(addReview.error as Error).message}</p>

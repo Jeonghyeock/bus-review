@@ -65,7 +65,8 @@ reviews (
   updated_at timestamptz default now()
 )
 create index on reviews (target_type, target_id);
-create index on reviews (user_id);             -- 프로필 조회 정책용 (0007)
+create unique index on reviews (user_id, target_type, target_id);  -- 사람·대상마다 리뷰 하나, 앱은 upsert. 프로필 조회 정책도 이 인덱스로 (0008, 0007 의 user_id 인덱스 대체)
+-- created_at·updated_at 은 트리거가 정함, 본문 1000자·태그 10개·닉네임 30자·아바타 주소 500자 CHECK (0008)
 
 -- 표시용 캐시(선택): 리뷰 목록에서 노선/정류장 이름을 API 재호출 없이 보여주기
 -- (현재 코드에서 쓰지 않음 — 클라이언트 접근은 권한 회수 + RLS 로 막아 둠, 0005)

@@ -218,3 +218,128 @@ describe("마이그레이션 (PGlite 에서 실제로 실행)", () => {
     expect(rows[0]?.n).toBe(1);
   });
 });
+
+describe("0008 리뷰 남용 막기", () => {
+  // 앱(useAddReview)의 upsert 를 PostgREST 가 바꾼 쿼리와 같은 모양: 보낸 열을 모두 SET 한다
+  const upsertReview = (db: PGlite, userId: string, rating: number, content: string) =>
+    asRole(db, "authenticated", userId, () =>
+      db.query(
+        `insert into public.reviews (target_type, target_id, region, rating, content, tags, user_id)
+         values ('stop', 's1', 'gyeonggi', $2, $3, '{}', $1)
+         on conflict (user_id, target_type, target_id)
+         do update set target_type = excluded.target_type, target_id = excluded.target_id, region = excluded.region,
+           rating = excluded.rating, content = excluded.content, tags = excluded.tags, user_id = excluded.user_id`,
+        [userId, rating, content],
+      ),
+    );
+
+  it("같은 사람이 같은 대상에 리뷰를 또 넣으면 거절하고, upsert 로는 그 리뷰를 고친다", async () => {
+    const db = await createDb();
+    await signUp(db, ALICE, "alice@example.com");
+    await signUp(db, BORA, "bora@example.com");
+    await writeReview(db, ALICE);
+    await expect(writeReview(db, ALICE)).rejects.toThrow(/reviews_user_target_key/);
+
+    await upsertReview(db, ALICE, 1, "고친 리뷰");
+    await writeReview(db, BORA); // 다른 사람은 같은 대상에 쓸 수 있다
+    const { rows } = await db.query("select user_id, rating, content from public.reviews order by user_id");
+    expect(rows).toEqual([
+      { user_id: ALICE, rating: 1, content: "고친 리뷰" },
+      { user_id: BORA, rating: 5, content: null },
+    ]);
+  });
+
+  it("작성 시각은 서버가 정하고, 고쳐도 바뀌지 않는다", async () => {
+    const db = await createDb();
+    await signUp(db, ALICE, "alice@example.com");
+    await asRole(db, "authenticated", ALICE, () =>
+      db.query(
+        "insert into public.reviews (target_type, target_id, region, user_id, rating, created_at, updated_at) values ('stop', 's1', 'gyeonggi', $1, 5, '2999-12-31', '2999-12-31')",
+        [ALICE],
+      ),
+    );
+    const before = await db.query<{ created_at: Date }>("select created_at from public.reviews");
+    expect(before.rows[0]!.created_at.getUTCFullYear()).toBeLessThan(2999);
+
+    await asRole(db, "authenticated", ALICE, () =>
+      db.query("update public.reviews set created_at = '2999-12-31', content = '고침' where user_id = $1", [ALICE]),
+    );
+    await upsertReview(db, ALICE, 3, "다시 고침");
+    const after = await db.query<{ created_at: Date; updated_at: Date }>("select created_at, updated_at from public.reviews");
+    expect(after.rows[0]!.created_at).toEqual(before.rows[0]!.created_at);
+    expect(after.rows[0]!.updated_at.getUTCFullYear()).toBeLessThan(2999);
+  });
+
+  it("본문 1000자·닉네임 30자를 넘으면 거절하고, 가입 때 긴 이름은 30자로 자른다", async () => {
+    const db = await createDb();
+    await signUp(db, ALICE, "alice@example.com");
+    await upsertReview(db, ALICE, 5, "가".repeat(1000));
+    await expect(upsertReview(db, ALICE, 5, "가".repeat(1001))).rejects.toThrow(/reviews_content_length/);
+    await expect(
+      asRole(db, "authenticated", ALICE, () =>
+        db.query("update public.profiles set nickname = repeat('가', 31) where id = $1", [ALICE]),
+      ),
+    ).rejects.toThrow(/profiles_nickname_length/);
+
+    await signUp(db, BORA, "bora@example.com", { name: "보".repeat(40) });
+    expect((await nicknames(db))[BORA]).toBe("보".repeat(30));
+  });
+
+  it("같은 사람·대상 리뷰가 이미 여럿이면 아무것도 바꾸지 않고 멈춘다", async () => {
+    const db = await createDb("0007");
+    await signUp(db, ALICE, "alice@example.com");
+    await writeReview(db, ALICE);
+    await writeReview(db, ALICE);
+
+    await expect(apply(db, "0008_review_limits.sql")).rejects.toThrow(/1 쌍/);
+    const { rows } = await db.query<{ idx: string | null }>("select to_regclass('public.reviews_user_target_key')::text as idx");
+    expect(rows[0]!.idx).toBeNull();
+  });
+
+  it("이미 긴 본문이 있어도 적용되고, 그 행은 그대로 남는다", async () => {
+    const db = await createDb("0007");
+    await signUp(db, ALICE, "alice@example.com");
+    await asRole(db, "authenticated", ALICE, () =>
+      db.query(
+        "insert into public.reviews (target_type, target_id, region, user_id, rating, content) values ('stop', 's1', 'gyeonggi', $1, 5, repeat('가', 5000))",
+        [ALICE],
+      ),
+    );
+    await apply(db, "0008_review_limits.sql");
+    const { rows } = await db.query<{ n: number }>("select char_length(content) as n from public.reviews");
+    expect(rows[0]!.n).toBe(5000);
+  });
+
+  it("이미 미래로 넣어 둔 작성 시각은 지금으로 바로잡고, 관리자(postgres)는 작성 시각을 고칠 수 있다", async () => {
+    const db = await createDb("0007");
+    await signUp(db, ALICE, "alice@example.com");
+    await asRole(db, "authenticated", ALICE, () =>
+      db.query(
+        "insert into public.reviews (target_type, target_id, region, user_id, rating, created_at) values ('stop', 's1', 'gyeonggi', $1, 5, '2999-12-31')",
+        [ALICE],
+      ),
+    );
+    await apply(db, "0008_review_limits.sql");
+    const fixed = await db.query<{ future: boolean }>("select created_at > now() as future from public.reviews");
+    expect(fixed.rows[0]!.future).toBe(false);
+
+    // 앱 역할로는 못 바꾸지만, 관리자 작업은 트리거가 막지 않는다
+    await db.query("update public.reviews set created_at = '2020-01-01'");
+    const admin = await db.query<{ y: number }>("select extract(year from created_at)::int as y from public.reviews");
+    expect(admin.rows[0]!.y).toBe(2020);
+  });
+
+  it("아바타 주소는 500자 상한이고 가입 때 잘라 넣으며, 중복이 된 reviews_user_idx 는 지운다", async () => {
+    const db = await createDb();
+    await signUp(db, ALICE, "alice@example.com", { avatar_url: "https://a.example/" + "x".repeat(1000) });
+    const { rows } = await db.query<{ n: number; idx: string | null }>(
+      "select char_length(avatar_url) as n, to_regclass('public.reviews_user_idx')::text as idx from public.profiles",
+    );
+    expect(rows[0]).toEqual({ n: 500, idx: null });
+    await expect(
+      asRole(db, "authenticated", ALICE, () =>
+        db.query("update public.profiles set avatar_url = repeat('x', 501) where id = $1", [ALICE]),
+      ),
+    ).rejects.toThrow(/profiles_avatar_url_length/);
+  });
+});

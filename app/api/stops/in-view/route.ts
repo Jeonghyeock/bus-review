@@ -9,12 +9,11 @@ import { streamStopsInBounds } from "@/lib/bus";
 export async function GET(req: NextRequest) {
   const p = new URL(req.url).searchParams;
   // Number(null)·Number("") 는 0 이라 빠진 좌표가 적도·본초 자오선으로 읽힌다. 네 값이 모두 있어야 하고,
-  // 위도·경도 범위 안이며 sw 가 ne 보다 작아야 한다 (지도는 이 형식으로만 보낸다).
+  // 위도·경도 범위 안이며 sw 가 ne 보다 작아야 한다 (지도는 이 형식으로만 보낸다). NaN·Infinity 는 범위 비교에서 걸린다.
   const raw = ["swLat", "swLng", "neLat", "neLng"].map((k) => p.get(k)?.trim() ?? "");
   const [swLat, swLng, neLat, neLng] = raw.map(Number);
   const valid =
     raw.every((v) => v !== "") &&
-    [swLat, swLng, neLat, neLng].every(Number.isFinite) &&
     Math.abs(swLat) <= 90 &&
     Math.abs(neLat) <= 90 &&
     Math.abs(swLng) <= 180 &&

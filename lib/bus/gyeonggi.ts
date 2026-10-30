@@ -134,36 +134,40 @@ async function runPool<T>(
 }
 
 const MAX_CELLS = 24; // 호출량 안전 상한
+// 셀을 만드는 창의 반폭(칸). 가까운 MAX_CELLS 칸은 어느 축으로든 중심 칸에서 이 안에 있다(아래 주석).
+const WINDOW = Math.ceil(MAX_CELLS / 2) + 1;
 
 // bounds 를 500m 셀 격자로 나누고 "화면 중심에서 가까운 순"으로 정렬 (가운데부터 조회)
-// 쓰는 것은 중심에서 가까운 MAX_CELLS 칸뿐이라, 격자 전체가 아니라 중심 칸에서 각 축 ±MAX_CELLS 칸 안만 만든다.
-// 그래서 영역을 아무리 넓게 보내도(지도를 크게 축소하거나 좌표를 일부러 넓게) 칸은 최대 49×49 개다.
-// 이 창 밖의 칸은 결과에 들지 않는다: 한 축이 49칸 이상이면 중심 줄에만 가까운 칸이 24개 넘게 있어
-// 24번째 거리가 12.5칸 이하인데, 창 밖 칸은 그 축으로만 23.5칸보다 멀다. 49칸보다 좁은 축은 원래 창 안에 다 든다.
-function cellsInBounds(
+// 쓰는 것은 중심에서 가까운 MAX_CELLS 칸뿐이라, 격자 전체가 아니라 중심 칸에서 각 축 ±WINDOW 칸 안만 만든다.
+// 그래서 영역을 아무리 넓게 보내도(지도를 크게 축소하거나 좌표를 일부러 넓게) 칸은 최대 27×27 개다.
+// 창 밖 칸은 결과에 들지 않는다: 한 축이 창보다 길면 그 축의 중심 줄 ±12칸에만 25칸이 있어
+// 24번째 거리가 12.5칸 이하인데, 창 밖 칸은 그 축으로만 13.5칸보다 멀다. 창보다 짧은 축은 원래 창 안에 다 든다.
+// 테스트(tests/stops-stream.test.ts)가 격자 전체를 정렬하는 방식과 결과를 견준다.
+export function cellsInBounds(
   sw: { lat: number; lng: number },
   ne: { lat: number; lng: number },
 ): Array<[number, number]> {
-  const cy = (sw.lat + ne.lat) / 2;
-  const cx = (sw.lng + ne.lng) / 2;
   const laMin = Math.floor(sw.lat / CELL);
   const laMax = Math.floor(ne.lat / CELL);
   const lnMin = Math.floor(sw.lng / CELL);
   const lnMax = Math.floor(ne.lng / CELL);
+  if (laMin > laMax || lnMin > lnMax) return []; // sw 가 ne 보다 큰 영역 (라우트는 미리 거르지만 직접 부를 때를 위해)
+  const cy = (sw.lat + ne.lat) / 2;
+  const cx = (sw.lng + ne.lng) / 2;
   const cLa = Math.floor(cy / CELL);
   const cLn = Math.floor(cx / CELL);
 
   const cells: Array<[number, number]> = [];
-  for (let la = Math.max(laMin, cLa - MAX_CELLS); la <= Math.min(laMax, cLa + MAX_CELLS); la++) {
-    for (let ln = Math.max(lnMin, cLn - MAX_CELLS); ln <= Math.min(lnMax, cLn + MAX_CELLS); ln++) {
+  for (let la = Math.max(laMin, cLa - WINDOW); la <= Math.min(laMax, cLa + WINDOW); la++) {
+    for (let ln = Math.max(lnMin, cLn - WINDOW); ln <= Math.min(lnMax, cLn + WINDOW); ln++) {
       cells.push([(la + 0.5) * CELL, (ln + 0.5) * CELL]);
     }
   }
   const dist2 = ([la, ln]: [number, number]) => (la - cy) ** 2 + (ln - cx) ** 2;
   cells.sort((a, b) => dist2(a) - dist2(b));
 
-  const total = (laMax - laMin + 1) * (lnMax - lnMin + 1);
-  if (total > MAX_CELLS) {
+  if (cells.length > MAX_CELLS) {
+    const total = (laMax - laMin + 1) * (lnMax - lnMin + 1);
     console.warn(`[gyeonggi] bounds 셀 ${total}개 → ${MAX_CELLS}개로 제한 (외곽 일부 미조회)`);
     cells.length = MAX_CELLS;
   }

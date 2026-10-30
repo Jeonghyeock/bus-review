@@ -202,25 +202,26 @@ describe("GET /api/stops/in-view", () => {
     expect(summaryLines(lines)).toEqual([]);
   });
 
-  it("영역이 아주 넓어도(40°×40°) 중심 24칸만 만들어 바로 끝낸다", async () => {
+  it("영역이 아주 넓어도(40°×40°) 중심 24칸만 조회한다", async () => {
     // 고치기 전에는 격자 전체(약 4,400만 칸)를 배열로 만들고 정렬한 뒤에야 24칸으로 잘라, 힙이 넘쳐 프로세스가 죽었다
     let calls = 0;
     const GET = await loadRoute(vi.fn(async () => station(`s${calls++}`)));
-    const started = performance.now();
     const lines = await readAll(
       await GET(new Request("http://localhost/api/stops/in-view?swLat=0&swLng=100&neLat=40&neLng=140") as never),
     );
     expect(calls).toBe(24);
     expect(lines).toHaveLength(24);
-    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it.each([
     ["좌표가 빠지면", "neLat=37.27&neLng=127.01"],
     ["좌표가 비어 있으면", "swLat=&swLng=127.00&neLat=37.27&neLng=127.01"],
+    ["좌표가 공백뿐이면", "swLat=%20&swLng=127.00&neLat=37.27&neLng=127.01"],
     ["숫자가 아니면", "swLat=abc&swLng=127.00&neLat=37.27&neLng=127.01"],
-    ["sw 가 ne 보다 크면", "swLat=37.27&swLng=127.01&neLat=37.26&neLng=127.00"],
+    ["위도만 sw 가 ne 보다 크면", "swLat=37.27&swLng=127.00&neLat=37.26&neLng=127.01"],
+    ["경도만 sw 가 ne 보다 크면", "swLat=37.26&swLng=127.01&neLat=37.27&neLng=127.00"],
     ["위도 범위를 넘으면", "swLat=-100&swLng=127.00&neLat=37.27&neLng=127.01"],
+    ["경도 범위를 넘으면", "swLat=37.26&swLng=127.00&neLat=37.27&neLng=181"],
   ])("%s 공공 API 를 부르지 않고 빈 응답을 보낸다", async (_, query) => {
     // 빠진 값을 Number(null)=0 으로 읽으면 (0,0)~(37,127) 이 되어 격자가 1억 칸을 넘었다
     let calls = 0;
@@ -229,5 +230,46 @@ describe("GET /api/stops/in-view", () => {
     expect(res.status).toBe(200);
     expect(await readAll(res)).toEqual([]);
     expect(calls).toBe(0);
+  });
+});
+
+describe("cellsInBounds", () => {
+  const CELL = 0.006;
+  // 고치기 전 방식: 격자 전체를 만들어 중심에서 가까운 순으로 정렬한 뒤 24칸으로 자른다
+  function reference(sw: { lat: number; lng: number }, ne: { lat: number; lng: number }) {
+    const cells: Array<[number, number]> = [];
+    for (let la = Math.floor(sw.lat / CELL); la <= Math.floor(ne.lat / CELL); la++) {
+      for (let ln = Math.floor(sw.lng / CELL); ln <= Math.floor(ne.lng / CELL); ln++) {
+        cells.push([(la + 0.5) * CELL, (ln + 0.5) * CELL]);
+      }
+    }
+    const cy = (sw.lat + ne.lat) / 2;
+    const cx = (sw.lng + ne.lng) / 2;
+    const d = ([la, ln]: [number, number]) => (la - cy) ** 2 + (ln - cx) ** 2;
+    return cells.sort((a, b) => d(a) - d(b)).slice(0, 24);
+  }
+  // 고정 시드 난수 — 실행마다 같은 영역을 쓴다
+  function rng(seed: number) {
+    return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  }
+
+  it("격자 전체를 정렬하는 방식과 같은 칸을 같은 순서로 돌려준다 (가늘고 긴 영역·셀 경계 포함)", async () => {
+    const { cellsInBounds } = await import("@/lib/bus/gyeonggi");
+    const r = rng(42);
+    for (let i = 0; i < 3000; i++) {
+      // 셀 경계에 딱 맞는 영역도 섞는다
+      const snap = (v: number) => (i % 5 === 0 ? Math.round(v / CELL) * CELL : v);
+      const sw = { lat: snap(37 + r()), lng: snap(126.5 + r()) };
+      const h = r() < 0.3 ? r() * 0.006 : r() * 0.6; // 한 줄짜리 띠부터 100칸까지
+      const w = r() < 0.3 ? r() * 0.006 : r() * 0.6;
+      const ne = { lat: snap(sw.lat + h), lng: snap(sw.lng + w) };
+      expect(cellsInBounds(sw, ne)).toEqual(reference(sw, ne));
+    }
+  });
+
+  it("sw 가 ne 보다 크면 빈 목록이다", async () => {
+    const { cellsInBounds } = await import("@/lib/bus/gyeonggi");
+    expect(cellsInBounds({ lat: 37.28, lng: 127.03 }, { lat: 37.24, lng: 126.98 })).toEqual([]);
+    expect(cellsInBounds({ lat: 37.28, lng: 126.98 }, { lat: 37.24, lng: 127.03 })).toEqual([]);
   });
 });

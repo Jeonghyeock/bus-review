@@ -172,15 +172,18 @@ export default function Home() {
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
   }, [selected, selectedRoute]);
 
+  // key: 다른 정류장·노선을 고르면 패널을 새로 만든다. 같은 인스턴스를 쓰면 쓰던 리뷰 초안·별점·오류 문구·펼친 노선이
+  // 남아, 그 초안이 새로 고른 정류장의 리뷰로 등록된다.
   const content = selectedRoute ? (
     <RoutePanel
+      key={selectedRoute.id}
       route={selectedRoute}
       onBack={() => setSelectedRoute(null)}
       showStops={!isDesktop}
       onSelectStation={handleStationClick}
     />
   ) : selected ? (
-    <StopPanel stop={selected} onBack={() => setSelected(null)} />
+    <StopPanel key={selected.id} stop={selected} onBack={() => setSelected(null)} />
   ) : (
     <div>
       <FavoritesList onSelect={handleSelectFavorite} />

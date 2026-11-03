@@ -174,9 +174,9 @@ export function cellsInBounds(
   return cells;
 }
 
-// GBIS(경기도 버스정보)가 다루는 범위: 경기·서울·인천 육지를 넉넉히 감싼 사각형.
-// 이 밖에는 정류소가 없으므로 조회하지 않는다 — 먼 지역(부산, 바다 등)을 보내도 공공 API 호출 한도를 쓰지 않게.
-const SERVICE_AREA = { sw: { lat: 36.8, lng: 126.0 }, ne: { lat: 38.4, lng: 128.0 } };
+// GBIS(경기도 버스정보)가 다루는 범위: 경기·서울·인천과, 경기 노선이 닿는 인접 도시(천안·아산·원주·춘천 등)를 넉넉히 감싼 사각형.
+// 이 밖에는 정류소가 없으므로 조회하지 않는다 — 먼 지역(부산·대구·강릉·제주 등)을 보내도 공공 API 호출 한도를 쓰지 않게.
+const SERVICE_AREA = { sw: { lat: 36.5, lng: 125.9 }, ne: { lat: 38.5, lng: 128.3 } };
 
 // 중심 셀부터 조회하고, 완료되는 셀마다 onCell 로 흘려보낸다 (동시 6개, 429 회피).
 // 영역은 SERVICE_AREA 와 겹치는 부분만 본다(겹치지 않으면 한 칸도 부르지 않는다).
@@ -191,7 +191,8 @@ export async function streamGyeonggiStopsInBounds(
 ): Promise<{ failed: number; total: number; started: number }> {
   const clippedSw = { lat: Math.max(sw.lat, SERVICE_AREA.sw.lat), lng: Math.max(sw.lng, SERVICE_AREA.sw.lng) };
   const clippedNe = { lat: Math.min(ne.lat, SERVICE_AREA.ne.lat), lng: Math.min(ne.lng, SERVICE_AREA.ne.lng) };
-  if (clippedSw.lat > clippedNe.lat || clippedSw.lng > clippedNe.lng) return { failed: 0, total: 0, started: 0 };
+  // 경계에 닿기만 하는 영역(넓이 0)도 겹치지 않은 것으로 본다 — 그대로 두면 경계 밖 한 칸을 부른다
+  if (clippedSw.lat >= clippedNe.lat || clippedSw.lng >= clippedNe.lng) return { failed: 0, total: 0, started: 0 };
   const cells = cellsInBounds(clippedSw, clippedNe);
   let failed = 0;
   let started = 0;

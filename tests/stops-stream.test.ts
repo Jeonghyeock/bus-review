@@ -231,10 +231,19 @@ describe("GET /api/stops/in-view", () => {
         return station(`s${ys.length}`);
       }),
     );
-    // 남쪽 경계(36.8) 아래로 걸친 영역
-    await readAll(await GET(new Request("http://localhost/api/stops/in-view?swLat=36.70&swLng=127.00&neLat=36.82&neLng=127.03") as never));
+    // 남쪽 경계(36.5) 아래로 걸친 영역 — 부른 칸은 모두 경계가 든 칸이나 그 위여야 한다
+    await readAll(await GET(new Request("http://localhost/api/stops/in-view?swLat=36.40&swLng=127.00&neLat=36.52&neLng=127.03") as never));
     expect(ys.length).toBeGreaterThan(0);
-    expect(Math.min(...ys)).toBeGreaterThanOrEqual(36.8 - 0.006);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual((Math.floor(36.5 / 0.006) + 0.5) * 0.006 - 1e-9);
+  });
+
+  it("경계에 닿기만 하는 영역(넓이 0)은 부르지 않고, 천안아산역처럼 경기 노선이 닿는 인접 도시는 부른다", async () => {
+    let calls = 0;
+    const GET = await loadRoute(vi.fn(async () => station(`s${calls++}`)));
+    await readAll(await GET(new Request("http://localhost/api/stops/in-view?swLat=38.5&swLng=127.00&neLat=39.0&neLng=127.03") as never));
+    expect(calls).toBe(0);
+    await readAll(await GET(new Request("http://localhost/api/stops/in-view?swLat=36.790&swLng=127.100&neLat=36.798&neLng=127.108") as never));
+    expect(calls).toBeGreaterThan(0);
   });
 
   it.each([

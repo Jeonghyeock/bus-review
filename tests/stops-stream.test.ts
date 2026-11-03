@@ -213,6 +213,30 @@ describe("GET /api/stops/in-view", () => {
     expect(lines).toHaveLength(24);
   });
 
+  it("서비스 지역(경기·서울·인천) 밖만 보면 공공 API 를 부르지 않고 빈 응답을 보낸다", async () => {
+    // 고치기 전에는 부산처럼 정류소가 있을 수 없는 곳도 칸마다 GBIS 를 불러 호출 한도를 썼다
+    let calls = 0;
+    const GET = await loadRoute(vi.fn(async () => station(`s${calls++}`)));
+    const res = await GET(new Request("http://localhost/api/stops/in-view?swLat=35.05&swLng=128.95&neLat=35.20&neLng=129.10") as never);
+    expect(res.status).toBe(200);
+    expect(await readAll(res)).toEqual([]);
+    expect(calls).toBe(0);
+  });
+
+  it("서비스 지역에 일부만 걸치면 겹친 곳만 조회한다", async () => {
+    const ys: number[] = [];
+    const GET = await loadRoute(
+      vi.fn(async (url: string) => {
+        ys.push(Number(new URL(url).searchParams.get("y")));
+        return station(`s${ys.length}`);
+      }),
+    );
+    // 남쪽 경계(36.8) 아래로 걸친 영역
+    await readAll(await GET(new Request("http://localhost/api/stops/in-view?swLat=36.70&swLng=127.00&neLat=36.82&neLng=127.03") as never));
+    expect(ys.length).toBeGreaterThan(0);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(36.8 - 0.006);
+  });
+
   it.each([
     ["좌표가 빠지면", "neLat=37.27&neLng=127.01"],
     ["좌표가 비어 있으면", "swLat=&swLng=127.00&neLat=37.27&neLng=127.01"],
